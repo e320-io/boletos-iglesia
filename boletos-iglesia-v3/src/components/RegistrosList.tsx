@@ -33,8 +33,10 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
     const matchStatus = filterStatus === 'todos' || r.status === filterStatus;
     const matchNacion = filterNacion === 'todos' || r.nacion_id === filterNacion;
     const matchCheckIn = filterCheckIn === 'todos' ||
-      (filterCheckIn === 'checked' && (r as any).checked_in) ||
-      (filterCheckIn === 'unchecked' && !(r as any).checked_in);
+      (filterCheckIn === 'checked_1' && (r as any).checked_in) ||
+      (filterCheckIn === 'unchecked_1' && !(r as any).checked_in) ||
+      (filterCheckIn === 'checked_2' && (r as any).checked_in_2) ||
+      (filterCheckIn === 'unchecked_2' && !(r as any).checked_in_2);
     const matchTipo = filterTipo === 'todos' || (r as any).tipo === filterTipo;
     return matchSearch && matchStatus && matchNacion && matchCheckIn && matchTipo;
   });
@@ -50,6 +52,17 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
     else { addToast?.('success', !isCheckedIn ? `✓ Check-in: ${registro.nombre}` : `Check-in removido: ${registro.nombre}`); onRefresh(); }
   };
 
+  const handleCheckIn2 = async (e: React.MouseEvent, registro: Registro) => {
+    e.stopPropagation();
+    const isCheckedIn2 = (registro as any).checked_in_2;
+    const { error } = await supabase
+      .from('registros')
+      .update({ checked_in_2: !isCheckedIn2, checked_in_2_at: !isCheckedIn2 ? new Date().toISOString() : null })
+      .eq('id', registro.id);
+    if (error) addToast?.('error', 'Error al actualizar check-in día 2');
+    else { addToast?.('success', !isCheckedIn2 ? `✓ Check-in Día 2: ${registro.nombre}` : `Check-in Día 2 removido: ${registro.nombre}`); onRefresh(); }
+  };
+
   const statusColors: Record<string, string> = {
     pendiente: 'bg-red-500/20 text-red-400 border-red-500/30',
     abono: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
@@ -60,6 +73,7 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
   const totalRecaudado = filtered.reduce((s, r) => s + Number(r.monto_pagado), 0);
   const totalPorCobrar = filtered.reduce((s, r) => s + (Number(r.monto_total) - Number(r.monto_pagado)), 0);
   const checkedInCount = filtered.filter(r => (r as any).checked_in).length;
+  const checkedIn2Count = filtered.filter(r => (r as any).checked_in_2).length;
   const blurStyle = privacyMode ? { filter: 'blur(8px)', userSelect: 'none' as const } : {};
 
   // Corte de caja: transactions from today (using Mexico City timezone)
@@ -112,8 +126,10 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             className="px-4 py-2.5 rounded-lg text-sm border"
             style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
             <option value="todos">Check-in: Todos</option>
-            <option value="checked">✓ Con check-in</option>
-            <option value="unchecked">✗ Sin check-in</option>
+            <option value="checked_1">✓ Día 1: Con check-in</option>
+            <option value="unchecked_1">✗ Día 1: Sin check-in</option>
+            <option value="checked_2">✓ Día 2: Con check-in</option>
+            <option value="unchecked_2">✗ Día 2: Sin check-in</option>
           </select>
         )}
         <button onClick={() => setShowCorte(!showCorte)}
@@ -312,8 +328,17 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
         )}
         {showCheckIn && (
           <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-            <div className="text-2xl font-bold text-purple-400">{checkedInCount} / {filtered.length}</div>
-            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Check-in</div>
+            <div className="flex gap-3">
+              <div>
+                <div className="text-lg font-bold text-emerald-400">{checkedInCount}</div>
+                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Día 1</div>
+              </div>
+              <div className="border-l pl-3" style={{ borderColor: 'var(--color-border)' }}>
+                <div className="text-lg font-bold text-orange-400">{checkedIn2Count}</div>
+                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Día 2</div>
+              </div>
+            </div>
+            <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Check-in</div>
           </div>
         )}
         <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -335,7 +360,8 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
-              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Check-in</th>}
+              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#10b981' }}>Día 1</th>}
+              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nombre</th>
               {hasTipos && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
@@ -348,15 +374,23 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             {filtered.map(r => {
               const saldo = Number(r.monto_total) - Number(r.monto_pagado);
               const isCheckedIn = (r as any).checked_in;
+              const isCheckedIn2 = (r as any).checked_in_2;
               return (
                 <tr key={r.id} onClick={() => onSelect(r)}
-                  className={`cursor-pointer transition-colors hover:bg-white/5 border-t ${isCheckedIn ? 'bg-emerald-500/5' : ''}`}
+                  className={`cursor-pointer transition-colors hover:bg-white/5 border-t`}
                   style={{ borderColor: 'var(--color-border)' }}>
                   {showCheckIn && (
                     <td className="text-center px-3 py-3">
                       <button onClick={(e) => handleCheckIn(e, r)}
                         className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all text-sm font-bold ${
                           isCheckedIn ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-600 text-transparent hover:border-slate-400'}`}>✓</button>
+                    </td>
+                  )}
+                  {showCheckIn && (
+                    <td className="text-center px-3 py-3">
+                      <button onClick={(e) => handleCheckIn2(e, r)}
+                        className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all text-sm font-bold ${
+                          isCheckedIn2 ? 'bg-orange-500 border-orange-400 text-white' : 'border-slate-600 text-transparent hover:border-slate-400'}`}>✓</button>
                     </td>
                   )}
                   <td className="px-4 py-3 font-medium">{r.nombre}</td>

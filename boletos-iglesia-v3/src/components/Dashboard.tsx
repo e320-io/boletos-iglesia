@@ -129,6 +129,84 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
         </div>
       </div>
 
+      {/* Desglose por método de pago */}
+      {(() => {
+        const allPagos = registros.flatMap(r => (r.pagos || []) as any[]);
+        const totalEfectivo = allPagos.filter(p => p.metodo_pago === 'efectivo').reduce((s: number, p: any) => s + Number(p.monto), 0);
+        const totalTarjeta = allPagos.filter(p => p.metodo_pago === 'tarjeta').reduce((s: number, p: any) => s + Number(p.monto), 0);
+        const totalTransferencia = allPagos.filter(p => p.metodo_pago === 'transferencia').reduce((s: number, p: any) => s + Number(p.monto), 0);
+        const totalOtro = allPagos.filter(p => p.metodo_pago === 'otro').reduce((s: number, p: any) => s + Number(p.monto), 0);
+
+        // Mercado Pago: 3.5% + IVA (16%) = 3.5% * 1.16 = 4.06%
+        const comisionPorcentaje = 0.035 * 1.16; // 4.06%
+        const comisionTarjeta = totalTarjeta * comisionPorcentaje;
+        const netoTarjeta = totalTarjeta - comisionTarjeta;
+        const netoTotal = totalEfectivo + netoTarjeta + totalTransferencia + totalOtro;
+
+        return (
+          <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <h3 className="font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Desglose por Método de Pago</h3>
+
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">💵</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Efectivo</span>
+                </div>
+                <div className="text-2xl font-bold text-green-400">${totalEfectivo.toLocaleString()}</div>
+                <div className="text-[10px] mt-1 text-green-400/60">Neto: ${totalEfectivo.toLocaleString()}</div>
+              </div>
+
+              <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">💳</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Tarjeta</span>
+                </div>
+                <div className="text-2xl font-bold text-blue-400">${totalTarjeta.toLocaleString()}</div>
+                <div className="text-[10px] mt-1 text-red-400">- ${comisionTarjeta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} comisión MP</div>
+                <div className="text-[10px] text-blue-400/60">Neto: ${netoTarjeta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+              </div>
+
+              <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">🏦</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Transferencia</span>
+                </div>
+                <div className="text-2xl font-bold text-purple-400">${totalTransferencia.toLocaleString()}</div>
+                <div className="text-[10px] mt-1 text-purple-400/60">Neto: ${totalTransferencia.toLocaleString()}</div>
+              </div>
+
+              <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">📋</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Otro</span>
+                </div>
+                <div className="text-2xl font-bold text-slate-400">${totalOtro.toLocaleString()}</div>
+                <div className="text-[10px] mt-1 text-slate-400/60">Neto: ${totalOtro.toLocaleString()}</div>
+              </div>
+            </div>
+
+            {/* Resumen neto */}
+            <div className="rounded-lg p-4 flex items-center justify-between" style={{ background: 'rgba(0,188,212,0.05)', border: '1px solid rgba(0,188,212,0.2)' }}>
+              <div>
+                <div className="text-sm font-medium">Ingreso neto real (después de comisiones)</div>
+                <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                  Comisión Mercado Pago: 3.5% + IVA (4.06%) sobre ${totalTarjeta.toLocaleString()} en tarjeta = -${comisionTarjeta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-3xl font-bold" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-display)' }}>
+                  ${netoTotal.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </div>
+                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                  de ${totalRecaudado.toLocaleString()} recaudado bruto
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Nación ranking */}
       <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
         <h3 className="font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Ranking por Nación</h3>

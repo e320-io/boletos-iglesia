@@ -16,6 +16,12 @@ export interface Registro {
   monto_pagado: number;
   precio_boleto: number;
   notas: string | null;
+  evento_id: string | null;
+  tipo: string | null;
+  checked_in: boolean;
+  checked_in_at: string | null;
+  checked_in_2: boolean;
+  checked_in_2_at: string | null;
   created_at: string;
   updated_at: string;
   // Joined

@@ -33,6 +33,35 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No hay correo registrado' }, { status: 400 });
     }
 
+    // Detect event for theming
+    let eventoSlug = 'default';
+    if (registro.evento_id) {
+      const { data: evento } = await supabase.from('eventos').select('slug, nombre').eq('id', registro.evento_id).single();
+      if (evento) eventoSlug = evento.slug;
+    }
+
+    // Theme colors for email
+    const isLegacy = eventoSlug === 'legacy-women';
+    const emailColors = isLegacy ? {
+      headerBg: 'linear-gradient(135deg, #6b4c3b, #4a3428)',
+      accent: '#6b4c3b',
+      bodyBg: '#faf7f4',
+      cardBg: '#ffffff',
+      textPrimary: '#2c1f16',
+      textSecondary: '#8c7b6b',
+      borderColor: '#e0d5c7',
+      fontFamily: "'Georgia', 'Playfair Display', serif",
+    } : {
+      headerBg: 'linear-gradient(135deg, #1e3a5f, #0a1628)',
+      accent: '#00bcd4',
+      bodyBg: '#f5f5f5',
+      cardBg: '#ffffff',
+      textPrimary: '#333333',
+      textSecondary: '#666666',
+      borderColor: '#eeeeee',
+      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+    };
+
     // Fetch group boletos if grupoIds provided
     let grupoBoletos: any[] = [];
     if (grupoIds && grupoIds.length > 1) {
@@ -83,9 +112,9 @@ export async function POST(request: NextRequest) {
       asientosHtml = grupoBoletos.map((b: any) => {
         const seats = (b.asientos || []).map((a: any) => a.id);
         const seatBadge = seats.length > 0
-          ? seats.map((s: string) => `<span style="display:inline-block;background:#00bcd4;color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${s}</span>`).join('')
+          ? seats.map((s: string) => `<span style="display:inline-block;background:${emailColors.accent};color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${s}</span>`).join('')
           : '<span style="color:#999;">Pendiente</span>';
-        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;">
+        return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid ${emailColors.borderColor};">
           <span>${b.nombre}</span>
           <span>${seatBadge}</span>
         </div>`;
@@ -93,7 +122,7 @@ export async function POST(request: NextRequest) {
     } else {
       asientosHtml = (registro.asientos || []).length > 0
         ? (registro.asientos || []).map((a: any) =>
-          `<span style="display:inline-block;background:#00bcd4;color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${a.id}</span>`
+          `<span style="display:inline-block;background:${emailColors.accent};color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${a.id}</span>`
         ).join('')
         : '<span style="color:#999;">General</span>';
     }
@@ -105,67 +134,71 @@ export async function POST(request: NextRequest) {
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
-<body style="margin:0;padding:0;background:#f5f5f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
-  <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
-    <div style="background:linear-gradient(135deg,#1e3a5f,#0a1628);padding:32px;text-align:left;">
-      <h1 style="color:#ffffff;font-size:24px;margin:0 0 8px 0;font-weight:700;">Comprobante de Boleto</h1>
-      <p style="color:#94a3b8;font-size:14px;margin:0;">Gracias por tu registro. Aquí están los detalles.</p>
+<body style="margin:0;padding:0;background:${emailColors.bodyBg};font-family:${emailColors.fontFamily};">
+  <div style="max-width:600px;margin:0 auto;background:${emailColors.cardBg};border-radius:12px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
+    <div style="background:${emailColors.headerBg};padding:32px;text-align:left;">
+      <h1 style="color:#ffffff;font-size:${isLegacy ? '28px' : '24px'};margin:0 0 8px 0;font-weight:700;${isLegacy ? "font-family:'Georgia',serif;letter-spacing:2px;" : ''}">
+        ${isLegacy ? 'LEGACY WOMAN' : 'Comprobante de Boleto'}
+      </h1>
+      <p style="color:rgba(255,255,255,0.7);font-size:14px;margin:0;">
+        ${isLegacy ? 'Congreso de Mujeres — Comprobante de Boleto' : 'Gracias por tu registro. Aquí están los detalles.'}
+      </p>
     </div>
     <div style="padding:32px;">
-      <p style="font-size:18px;color:#333;margin:0 0 24px 0;">
+      <p style="font-size:18px;color:${emailColors.textPrimary};margin:0 0 24px 0;">
         Hola <strong>${registro.nombre}</strong>,
       </p>
       <table style="width:100%;border-collapse:collapse;">
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;width:40%;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;width:40%;">
             ${isGrupo ? `Boletos (${grupoBoletos.length})` : 'Asientos'}
           </td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;">
             ${isGrupo ? `<div style="font-size:13px;">${asientosHtml}</div>` : asientosHtml}
           </td>
         </tr>
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;">Status</td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;">Status</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;">
             <span style="color:${statusColor[overallStatus]};font-weight:600;">${statusLabel[overallStatus]}</span>
           </td>
         </tr>
         ${lastPago ? `
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;">Fecha de pago</td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;">Fecha de pago</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;color:${emailColors.textPrimary};">
             ${new Date(lastPago.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
           </td>
         </tr>
         ` : ''}
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;">Monto total recibido</td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:600;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;">Monto total recibido</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;font-weight:600;color:${emailColors.textPrimary};">
             $${totalPagado.toLocaleString()} ${lastPago ? `— ${metodoPagoLabel[lastPago.metodo_pago] || 'Otro'}` : ''}
           </td>
         </tr>
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;">Costo total</td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:600;">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;">Costo total</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;font-weight:600;color:${emailColors.textPrimary};">
             $${totalBoletos.toLocaleString()}${isGrupo ? ` (${grupoBoletos.length} boletos)` : ''}
           </td>
         </tr>
         <tr>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;">Saldo faltante</td>
-          <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;font-weight:600;color:${saldoFaltante > 0 ? '#f59e0b' : '#10b981'};">
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};color:${emailColors.textSecondary};font-size:14px;">Saldo faltante</td>
+          <td style="padding:14px 0;border-bottom:1px solid ${emailColors.borderColor};font-size:14px;font-weight:600;color:${saldoFaltante > 0 ? '#c49a4a' : '#6b8f5e'};">
             $${saldoFaltante.toLocaleString()}
           </td>
         </tr>
         ${registro.nacion ? `
         <tr>
-          <td style="padding:14px 0;color:#666;font-size:14px;">Mentor</td>
-          <td style="padding:14px 0;font-size:14px;">${(registro.nacion as any).nombre}</td>
+          <td style="padding:14px 0;color:${emailColors.textSecondary};font-size:14px;">Mentor</td>
+          <td style="padding:14px 0;font-size:14px;color:${emailColors.textPrimary};">${(registro.nacion as any).nombre}</td>
         </tr>
         ` : ''}
       </table>
     </div>
-    <div style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #eee;">
-      <p style="color:#999;font-size:12px;margin:0;">Este correo fue generado automáticamente. Por favor no respondas.</p>
+    <div style="background:${isLegacy ? '#f0ebe4' : '#f8f9fa'};padding:16px 32px;text-align:center;border-top:1px solid ${emailColors.borderColor};">
+      <p style="color:${emailColors.textSecondary};font-size:12px;margin:0;">Este correo fue generado automáticamente. Por favor no respondas.</p>
     </div>
   </div>
 </body>

@@ -44,6 +44,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
   const [nacionId, setNacionId] = useState('');
   const [tipo, setTipo] = useState('Encuentrista');
   const [numBoletos, setNumBoletos] = useState(1);
+  const [guestNames, setGuestNames] = useState<string[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -87,7 +88,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
   const resetForm = () => {
     setNombre(''); setTelefono(''); setCorreo(''); setNacionId('');
-    setNumBoletos(1); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
+    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
   };
 
   // Computed: total based on number of boletos
@@ -121,6 +122,18 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
       const pagoPorBoleto = montoAbono / numBoletos;
       const statusPorBoleto = pagoPorBoleto >= precioBoleto ? 'liquidado' : pagoPorBoleto > 0 ? 'abono' : 'pendiente';
 
+      // Build names for each boleto
+      const boletoNames: string[] = [];
+      boletoNames.push(nombre.trim()); // First boleto always uses main name
+      for (let i = 1; i < numBoletos; i++) {
+        const guestName = guestNames[i - 1]?.trim();
+        if (guestName) {
+          boletoNames.push(guestName);
+        } else {
+          boletoNames.push(`${nombre.trim()} - Invitada ${i}`);
+        }
+      }
+
       const createdIds: string[] = [];
 
       // Create one registro per boleto
@@ -128,7 +141,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         const { data: registro, error: regError } = await supabase
           .from('registros')
           .insert({
-            nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
+            nombre: boletoNames[i], telefono: telefono.trim() || null, correo: correo.trim() || null,
             nacion_id: nacionId, evento_id: evento.id, tipo, status: statusPorBoleto,
             monto_total: precioBoleto, monto_pagado: pagoPorBoleto, precio_boleto: precioBoleto,
           })
@@ -297,7 +310,12 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
                     <div className="flex items-center gap-3">
-                      <button onClick={() => { setNumBoletos(Math.max(1, numBoletos - 1)); setSelectedSeats(prev => prev.slice(0, Math.max(1, numBoletos - 1))); }}
+                      <button onClick={() => {
+                        const n = Math.max(1, numBoletos - 1);
+                        setNumBoletos(n);
+                        setSelectedSeats(prev => prev.slice(0, n));
+                        setGuestNames(prev => prev.slice(0, Math.max(0, n - 1)));
+                      }}
                         className="w-10 h-10 rounded-lg border text-lg font-bold flex items-center justify-center hover:border-cyan-500 transition-all"
                         style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>−</button>
                       <span className="text-2xl font-bold w-10 text-center" style={{ fontFamily: 'var(--font-display)' }}>{numBoletos}</span>
@@ -309,6 +327,38 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                       </span>
                     </div>
                   </div>
+                  {/* Guest names for additional boletos */}
+                  {numBoletos > 1 && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                        Nombres de los boletos <span className="opacity-50">(opcional — si no pones nombre se guarda como "Invitada 1", etc.)</span>
+                      </label>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-xs px-3 py-2 rounded-lg" style={{ background: 'var(--color-bg)' }}>
+                          <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white" style={{ background: 'var(--color-accent)' }}>1</span>
+                          <span className="font-medium">{nombre || 'Titular'}</span>
+                          <span style={{ color: 'var(--color-text-muted)' }}>(titular)</span>
+                        </div>
+                        {Array.from({ length: numBoletos - 1 }, (_, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0" style={{ background: 'var(--color-border)', color: 'var(--color-text-muted)' }}>{i + 2}</span>
+                            <input
+                              type="text"
+                              value={guestNames[i] || ''}
+                              onChange={e => {
+                                const newNames = [...guestNames];
+                                newNames[i] = e.target.value;
+                                setGuestNames(newNames);
+                              }}
+                              placeholder={`${nombre || 'Titular'} - Invitada ${i + 1}`}
+                              className="flex-1 px-3 py-2 rounded-lg text-sm border bg-transparent"
+                              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
                     <select value={nacionId} onChange={e => setNacionId(e.target.value)}

@@ -17,12 +17,13 @@ interface Props {
   eventoId?: string;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
   userRole?: string;
+  isFreeEvent?: boolean;
 }
 
-export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin' }: Props) {
+export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
-  const canSeeMoney = userRole !== 'registro';
+  const canSeeMoney = userRole !== 'registro' && !isFreeEvent;
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterNacion, setFilterNacion] = useState<string>('todos');
   const [filterCheckIn, setFilterCheckIn] = useState<string>('todos');
@@ -361,10 +362,12 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Check-in</div>
           </div>
         )}
-        <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-          <div className="text-2xl font-bold text-emerald-400">{filtered.filter(r => r.status === 'liquidado').length}</div>
-          <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Liquidados</div>
-        </div>
+        {!isFreeEvent && (
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-2xl font-bold text-emerald-400">{filtered.filter(r => r.status === 'liquidado').length}</div>
+            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Liquidados</div>
+          </div>
+        )}
         {canSeeMoney && (
           <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
             <div className="text-2xl font-bold text-emerald-400" style={blurStyle}>${totalRecaudado.toLocaleString()}</div>

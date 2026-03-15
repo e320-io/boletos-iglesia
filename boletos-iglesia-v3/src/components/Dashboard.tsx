@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import type { Registro, Asiento, Nacion } from '@/types';
 
 interface Props {
@@ -12,37 +11,6 @@ interface Props {
 }
 
 export default function Dashboard({ registros, asientos, naciones, eventoFecha, eventoNombre }: Props) {
-  const [authenticated, setAuthenticated] = useState(false);
-  const [pin, setPin] = useState('');
-  const [pinError, setPinError] = useState(false);
-
-  const DASHBOARD_PIN = '1234';
-
-  const handlePinSubmit = () => {
-    if (pin === DASHBOARD_PIN) { setAuthenticated(true); setPinError(false); }
-    else { setPinError(true); setPin(''); }
-  };
-
-  if (!authenticated) {
-    return (
-      <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="rounded-xl p-8 border text-center w-full max-w-sm" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-          <div className="w-16 h-16 rounded-full mx-auto mb-4 flex items-center justify-center text-3xl" style={{ background: 'rgba(0,188,212,0.1)' }}>🔒</div>
-          <h2 className="text-xl font-bold mb-2" style={{ fontFamily: 'var(--font-display)' }}>Dashboard Ejecutivo</h2>
-          <p className="text-sm mb-6" style={{ color: 'var(--color-text-muted)' }}>Ingresa el PIN para acceder</p>
-          <div className="space-y-3">
-            <input type="password" value={pin} onChange={e => { setPin(e.target.value); setPinError(false); }}
-              onKeyDown={e => e.key === 'Enter' && handlePinSubmit()} placeholder="PIN" maxLength={10}
-              className="w-full px-4 py-3 rounded-lg text-center text-2xl tracking-[0.5em] border bg-transparent"
-              style={{ borderColor: pinError ? 'var(--color-danger)' : 'var(--color-border)', color: 'var(--color-text)' }} autoFocus />
-            {pinError && <p className="text-xs text-red-400">PIN incorrecto</p>}
-            <button onClick={handlePinSubmit} className="w-full py-3 rounded-lg font-bold text-white"
-              style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>Acceder</button>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const totalRegistrados = registros.length;
   const boletosLiquidados = registros.filter(r => r.status === 'liquidado').length;
@@ -80,8 +48,6 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
           <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>Dashboard — {eventoNombre || 'Evento'}</h2>
           <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Resumen ejecutivo</p>
         </div>
-        <button onClick={() => setAuthenticated(false)} className="px-3 py-1.5 rounded-lg text-xs border hover:border-red-500 hover:text-red-400"
-          style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>🔒 Cerrar</button>
       </div>
 
       <div className={`grid grid-cols-2 ${hasAsientos ? 'lg:grid-cols-6' : 'lg:grid-cols-5'} gap-4`}>

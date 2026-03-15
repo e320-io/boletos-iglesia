@@ -171,9 +171,15 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         }
       }
 
-      // Send email for first registro only
+      // Send email for first registro, include all grupo IDs if multiple
       if (correo.trim() && createdIds.length > 0) {
-        try { await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: createdIds[0] }) }); } catch {}
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registroId: createdIds[0], grupoIds: createdIds.length > 1 ? createdIds : undefined }),
+          });
+        } catch {}
       }
 
       let msg = `${numBoletos} boleto${numBoletos > 1 ? 's' : ''} registrado${numBoletos > 1 ? 's' : ''} para ${nombre}. `;

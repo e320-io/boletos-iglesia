@@ -3,17 +3,19 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { METODOS_PAGO } from '@/lib/constants';
-import type { Registro, Nacion, MetodoPago } from '@/types';
+import type { Registro, Nacion, Asiento, MetodoPago } from '@/types';
 
 interface Props {
   registro: Registro;
   naciones: Nacion[];
+  asientos?: Asiento[];
+  tieneAsientos?: boolean;
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, onBack, onRefresh, addToast }: Props) {
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [referencia, setReferencia] = useState('');
@@ -29,6 +31,40 @@ export default function RegistroDetail({ registro, naciones, onBack, onRefresh, 
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Seat assignment
+  const [showSeatPicker, setShowSeatPicker] = useState(false);
+  const [selectedSeat, setSelectedSeat] = useState('');
+
+  const registroAsientos = (registro.asientos || []) as any[];
+  const hasAsiento = registroAsientos.length > 0;
+  const isLiquidado = registro.status === 'liquidado';
+  const canAssignSeat = tieneAsientos && isLiquidado && !hasAsiento;
+
+  const availableSeats = asientos
+    .filter(a => a.estado === 'disponible')
+    .sort((a, b) => {
+      if (a.fila !== b.fila) return a.fila.localeCompare(b.fila);
+      return a.columna - b.columna;
+    });
+
+  const handleAssignSeat = async () => {
+    if (!selectedSeat) { addToast('error', 'Selecciona un asiento'); return; }
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('asientos')
+        .update({ estado: 'ocupado', registro_id: registro.id })
+        .eq('id', selectedSeat);
+      if (error) throw error;
+      addToast('success', `Asiento ${selectedSeat} asignado a ${registro.nombre}`);
+      setShowSeatPicker(false);
+      setSelectedSeat('');
+      onRefresh(); onBack();
+    } catch (error: any) {
+      addToast('error', `Error: ${error.message}`);
+    } finally { setLoading(false); }
+  };
 
   const saldo = Number(registro.monto_total) - Number(registro.monto_pagado);
   const nacion = naciones.find(n => n.id === registro.nacion_id);
@@ -222,8 +258,8 @@ export default function RegistroDetail({ registro, naciones, onBack, onRefresh, 
                   <div>
                     <span style={{ color: 'var(--color-text-muted)' }}>Asientos:</span>
                     <span className="ml-2 inline-flex gap-1">
-                      {(registro.asientos || []).length > 0
-                        ? (registro.asientos || []).map((a: any) => (
+                      {registroAsientos.length > 0
+                        ? registroAsientos.map((a: any) => (
                             <span key={a.id} className="px-1.5 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{a.id}</span>
                           ))
                         : <span style={{ color: 'var(--color-text-muted)' }}>Sin asiento</span>
@@ -347,9 +383,37 @@ export default function RegistroDetail({ registro, naciones, onBack, onRefresh, 
           )}
         </div>
 
-        {/* Right: Add payment */}
-        {saldo > 0 && !editing && (
-          <div className="rounded-xl p-6 border h-fit sticky top-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+        {/* Right column */}
+        {!editing && (
+          <div className="space-y-4">
+            {/* Seat assignment - only for liquidado without seat */}
+            {canAssignSeat && (
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: '#f59e0b', boxShadow: '0 0 15px rgba(245,158,11,0.1)' }}>
+                <h3 className="font-bold mb-3" style={{ fontFamily: 'var(--font-display)' }}>🪑 Asignar Asiento</h3>
+                <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
+                  Este boleto está liquidado. Selecciona un asiento disponible.
+                </p>
+                <div className="space-y-3">
+                  <select value={selectedSeat} onChange={e => setSelectedSeat(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                    <option value="">Seleccionar asiento...</option>
+                    {availableSeats.map(a => (
+                      <option key={a.id} value={a.id}>{a.id} (Fila {a.fila}, Col {a.columna})</option>
+                    ))}
+                  </select>
+                  <button onClick={handleAssignSeat} disabled={loading || !selectedSeat}
+                    className="w-full py-2.5 rounded-lg font-bold text-white transition-all disabled:opacity-40"
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontFamily: 'var(--font-display)' }}>
+                    {loading ? 'Asignando...' : `Asignar ${selectedSeat || 'asiento'}`}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* Abono section */}
+            {saldo > 0 && (
+              <div className="rounded-xl p-6 border h-fit sticky top-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
             <h3 className="font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Registrar Abono</h3>
             <div className="space-y-4">
               <div>
@@ -390,6 +454,8 @@ export default function RegistroDetail({ registro, naciones, onBack, onRefresh, 
                 {loading ? 'Procesando...' : `Registrar Abono de $${(parseFloat(montoAbono) || 0).toLocaleString()}`}
               </button>
             </div>
+          </div>
+        )}
           </div>
         )}
       </div>

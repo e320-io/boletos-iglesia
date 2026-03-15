@@ -32,9 +32,12 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
   const [newPassword, setNewPassword] = useState('');
   const [newNombre, setNewNombre] = useState('');
   const [newRol, setNewRol] = useState('registro');
+  const [newEventoId, setNewEventoId] = useState('');
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
+  // Eventos list (for assigning to users)
+  const [eventos, setEventos] = useState<any[]>([]);
   // Change password
   const [changingPwFor, setChangingPwFor] = useState<string | null>(null);
   const [newPw, setNewPw] = useState('');
@@ -44,7 +47,12 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
     if (data) setUsuarios(data);
   }, []);
 
-  useEffect(() => { fetchUsers(); }, [fetchUsers]);
+  useEffect(() => {
+    fetchUsers();
+    supabase.from('eventos').select('id, nombre, slug').eq('activo', true).order('fecha').then(({ data }) => {
+      if (data) setEventos(data);
+    });
+  }, [fetchUsers]);
 
   const fetchLog = useCallback(async () => {
     setLogLoading(true);
@@ -77,6 +85,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
         p_password: newPassword,
         p_nombre: newNombre.trim(),
         p_rol: newRol,
+        p_evento_id: newRol === 'evento' && newEventoId ? newEventoId : null,
       });
       if (error) throw error;
 
@@ -120,6 +129,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
     admin: { label: 'Admin', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
     registro: { label: 'Registro', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
     dueno: { label: 'Dueño', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+    evento: { label: 'Evento', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
   };
 
   return (
@@ -187,13 +197,14 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Rol</label>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {[
                     { value: 'registro', label: '📋 Registro', desc: 'Registra personas' },
                     { value: 'dueno', label: '👑 Dueño', desc: 'Solo dashboard' },
+                    { value: 'evento', label: '🎫 Evento', desc: 'Un solo evento' },
                     { value: 'admin', label: '⚙️ Admin', desc: 'Todo + usuarios' },
                   ].map(r => (
-                    <button key={r.value} onClick={() => setNewRol(r.value)}
+                    <button key={r.value} onClick={() => { setNewRol(r.value); if (r.value !== 'evento') setNewEventoId(''); }}
                       className={`px-2 py-2 rounded-lg text-xs border transition-all text-center ${newRol === r.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                       style={newRol === r.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
                       <div className="font-bold">{r.label}</div>
@@ -202,6 +213,17 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               </div>
+              {newRol === 'evento' && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Evento asignado *</label>
+                  <select value={newEventoId} onChange={e => setNewEventoId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                    <option value="">Seleccionar evento...</option>
+                    {eventos.map(e => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
+                  </select>
+                </div>
+              )}
             </div>
 
             {formError && (
@@ -297,7 +319,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
         {/* Roles explanation */}
         <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
           <h3 className="font-bold mb-3" style={{ fontFamily: 'var(--font-display)' }}>Roles del Sistema</h3>
-          <div className="grid grid-cols-3 gap-4 text-sm">
+          <div className="grid grid-cols-4 gap-4 text-sm">
             <div>
               <div className="font-bold text-cyan-400 mb-1">📋 Registro</div>
               <p style={{ color: 'var(--color-text-muted)' }}>Registra personas, cobra boletos, hace check-in y genera corte de caja.</p>
@@ -305,6 +327,10 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
             <div>
               <div className="font-bold text-amber-400 mb-1">👑 Dueño</div>
               <p style={{ color: 'var(--color-text-muted)' }}>Solo ve el Dashboard ejecutivo. No puede registrar ni modificar datos.</p>
+            </div>
+            <div>
+              <div className="font-bold text-purple-400 mb-1">🎫 Evento</div>
+              <p style={{ color: 'var(--color-text-muted)' }}>Como Registro pero solo accede a un evento específico asignado.</p>
             </div>
             <div>
               <div className="font-bold text-red-400 mb-1">⚙️ Admin</div>

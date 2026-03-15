@@ -46,6 +46,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const isLiquidado = registro.status === 'liquidado';
   const canAssignSeat = tieneAsientos && isLiquidado && !hasAsiento;
 
+  // Will this abono liquidate the ticket?
+  const abonoAmount = parseFloat(montoAbono) || 0;
+  const willLiquidate = abonoAmount > 0 && abonoAmount >= saldo && !hasAsiento && tieneAsientos;
+
   const handleSeatClickForAssign = (seatId: string) => {
     setSelectedSeatForAssign(prev =>
       prev.includes(seatId) ? prev.filter(s => s !== seatId) : [...prev, seatId]
@@ -74,6 +78,16 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     if (!monto || monto <= 0) { addToast('error', 'Ingresa un monto válido'); return; }
     if (monto > saldo) { addToast('error', 'El abono no puede ser mayor al saldo'); return; }
 
+    const newPagado = Number(registro.monto_pagado) + monto;
+    const newStatus = newPagado >= Number(registro.monto_total) ? 'liquidado' : 'abono';
+    const isLiquidating = newStatus === 'liquidado';
+
+    // If liquidating and has seats but none selected, require selection
+    if (isLiquidating && tieneAsientos && !hasAsiento && selectedSeatForAssign.length === 0) {
+      addToast('error', 'Selecciona un asiento en el mapa antes de liquidar');
+      return;
+    }
+
     setLoading(true);
     try {
       const { error: payError } = await supabase
@@ -81,19 +95,24 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         .insert({ registro_id: registro.id, monto, metodo_pago: metodoPago, referencia: referencia.trim() || null });
       if (payError) throw payError;
 
-      const newPagado = Number(registro.monto_pagado) + monto;
-      const newStatus = newPagado >= Number(registro.monto_total) ? 'liquidado' : 'abono';
-
       const { error: regError } = await supabase
         .from('registros').update({ monto_pagado: newPagado, status: newStatus }).eq('id', registro.id);
       if (regError) throw regError;
+
+      // Assign seat if liquidating
+      if (isLiquidating && tieneAsientos && selectedSeatForAssign.length > 0) {
+        const { error: seatError } = await supabase
+          .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeatForAssign);
+        if (seatError) throw seatError;
+      }
 
       if (registro.correo) {
         try { await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: registro.id }) }); } catch {}
       }
 
-      addToast('success', `Abono de $${monto.toLocaleString()} registrado. ${newStatus === 'liquidado' ? '¡Boleto liquidado! Ahora asígnale un asiento.' : ''}`);
-      setMontoAbono(''); setReferencia('');
+      const seatMsg = selectedSeatForAssign.length > 0 ? ` Asiento: ${selectedSeatForAssign.join(', ')}` : '';
+      addToast('success', `Abono de $${monto.toLocaleString()} registrado. ${isLiquidating ? `¡Boleto liquidado!${seatMsg}` : ''}`);
+      setMontoAbono(''); setReferencia(''); setSelectedSeatForAssign([]);
       onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error: ${error.message}`);
@@ -388,6 +407,26 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     </div>
                     <button onClick={() => setMontoAbono(saldo.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Liquidar total</button>
                   </div>
+
+                  {/* Seat map appears when this abono will liquidate the ticket */}
+                  {willLiquidate && (
+                    <div className="rounded-lg p-4 border" style={{ borderColor: '#f59e0b', background: 'rgba(245,158,11,0.05)' }}>
+                      <h4 className="font-bold text-sm mb-2" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
+                        🪑 Este pago liquida el boleto — selecciona asiento
+                      </h4>
+                      {selectedSeatForAssign.length > 0 && (
+                        <div className="rounded-lg p-2 mb-3 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
+                          ✓ {selectedSeatForAssign.map(s => (
+                            <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                          ))}
+                        </div>
+                      )}
+                      <div className="max-h-[400px] overflow-auto">
+                        <SeatMap asientos={asientos} selectedSeats={selectedSeatForAssign} onSeatClick={handleSeatClickForAssign} />
+                      </div>
+                    </div>
+                  )}
+
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Referencia (opcional)</label>
                     <input type="text" value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="# de transferencia, etc."
@@ -395,8 +434,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                   </div>
                   <button onClick={handleAbono} disabled={loading || !montoAbono}
                     className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
-                    style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
-                    {loading ? 'Procesando...' : `Registrar Abono de $${(parseFloat(montoAbono) || 0).toLocaleString()}`}
+                    style={{ background: willLiquidate ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
+                    {loading ? 'Procesando...' : willLiquidate
+                      ? `Liquidar y Asignar ${selectedSeatForAssign.length > 0 ? selectedSeatForAssign.join(', ') : 'Asiento'}`
+                      : `Registrar Abono de $${(parseFloat(montoAbono) || 0).toLocaleString()}`}
                   </button>
                 </div>
               </div>

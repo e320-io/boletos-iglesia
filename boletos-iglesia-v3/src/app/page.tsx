@@ -32,7 +32,7 @@ export default function HomePage() {
       if (data) {
         setEventos(data);
         // Auto-select event for evento-specific users
-        if (user.rol === 'evento' && user.evento_id) {
+        if (user && user.rol === 'evento' && user.evento_id) {
           const assigned = data.find((e: any) => e.id === user.evento_id);
           if (assigned) setSelectedEvento(assigned);
         }

@@ -36,15 +36,10 @@ h1, h2, h3, h4, h5, h6 {
   font-family: var(--font-display);
 }
 
-/* Custom scrollbar - dark */
-.theme-dark ::-webkit-scrollbar, ::-webkit-scrollbar { width: 6px; height: 6px; }
-.theme-dark ::-webkit-scrollbar-track { background: var(--color-bg); }
-.theme-dark ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-
-/* Custom scrollbar - light */
-.theme-light ::-webkit-scrollbar { width: 6px; height: 6px; }
-.theme-light ::-webkit-scrollbar-track { background: #f0ebe4; }
-.theme-light ::-webkit-scrollbar-thumb { background: #c4b5a4; border-radius: 3px; }
+/* Custom scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--color-bg); }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
 
 /* Seat styles */
 .seat {
@@ -87,30 +82,30 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 16px rgba(0, 188, 212, 0.5);
 }
 
-/* Light theme seats (Legacy Women) */
-.theme-light .seat-disponible {
-  background: #ffffff;
-  color: #6b4c3b;
+/* Legacy Women custom seat colors (on dark theme) */
+.legacy-women .seat-disponible {
+  background: rgba(255, 255, 255, 0.9);
+  color: #4a3428;
   border-color: #d4c4b0;
 }
-.theme-light .seat-disponible:hover {
-  background: #f0e6d8;
+.legacy-women .seat-disponible:hover {
+  background: #ffffff;
   border-color: #6b4c3b;
   transform: scale(1.1);
-  box-shadow: 0 0 8px rgba(107, 76, 59, 0.2);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
 }
-.theme-light .seat-ocupado {
+.legacy-women .seat-ocupado {
   background: #00bcd4;
   color: #ffffff;
   border-color: #0097a7;
   cursor: default;
 }
-.theme-light .seat-selected {
+.legacy-women .seat-selected {
   background: #6b4c3b;
   color: white;
   border-color: #4a3428;
   transform: scale(1.1);
-  box-shadow: 0 0 12px rgba(107, 76, 59, 0.4);
+  box-shadow: 0 0 12px rgba(107, 76, 59, 0.5);
 }
 
 .seat-no_disponible {
@@ -152,10 +147,4 @@ input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--color-accent) !important;
   box-shadow: 0 0 0 3px var(--color-accent-glow);
-}
-
-/* Light mode specific overrides */
-.theme-light select option {
-  background: white;
-  color: #2c1f16;
 }

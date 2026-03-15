@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { METODOS_PAGO } from '@/lib/constants';
 import { applyTheme, getTheme, resetTheme } from '@/lib/themes';
+import { logActivity } from '@/lib/activity';
+import { useAuth } from '@/lib/auth';
 import type { Nacion, Registro, Asiento, MetodoPago } from '@/types';
 import SeatMap from '@/components/SeatMap';
 import RegistrosList from '@/components/RegistrosList';
@@ -33,6 +35,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const theme = getTheme(evento.slug);
   const canRegister = userRole === 'admin' || userRole === 'registro';
   const canSeeDashboard = userRole === 'admin' || userRole === 'dueno';
+  const { user } = useAuth();
 
   // Apply event theme
   useEffect(() => {
@@ -203,6 +206,15 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
         msg += `Abono de $${montoAbono.toLocaleString()} distribuido en ${numBoletos} boletos.`;
       } else {
         msg += 'Pendiente de pago.';
+      }
+
+      // Log activity
+      if (user) {
+        const detail = `${numBoletos} boleto(s) para ${nombre.trim()}${montoAbono > 0 ? ` — $${montoAbono.toLocaleString()} ${metodoPago}` : ''}${selectedSeats.length > 0 ? ` — Asientos: ${selectedSeats.join(', ')}` : ''}`;
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_creado', detail, eventoId: evento.id, registroId: createdIds[0] });
+        if (montoAbono > 0) {
+          await logActivity({ userId: user.id, userName: user.nombre, action: 'pago_registrado', detail: `$${montoAbono.toLocaleString()} ${metodoPago} — ${nombre.trim()}`, eventoId: evento.id, registroId: createdIds[0] });
+        }
       }
       addToast('success', msg);
       resetForm();

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { METODOS_PAGO } from '@/lib/constants';
+import { logActivity } from '@/lib/activity';
+import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion, Asiento, MetodoPago } from '@/types';
 import SeatMap from '@/components/SeatMap';
 
@@ -18,6 +20,7 @@ interface Props {
 }
 
 export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], onBack, onRefresh, addToast }: Props) {
+  const { user } = useAuth();
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [referencia, setReferencia] = useState('');
@@ -101,6 +104,11 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
       }
 
       addToast('success', `¡${grupoBoletos.length} boletos liquidados! ${groupSeats.length > 0 ? 'Asientos: ' + groupSeats.join(', ') : ''}`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'pago_grupo_liquidado',
+          detail: `${grupoBoletos.length} boletos de ${registro.nombre} — $${grupoSaldoTotal.toLocaleString()} ${groupMetodoPago}${groupSeats.length > 0 ? ' — Asientos: ' + groupSeats.join(', ') : ''}`,
+          eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
       setShowGroupLiquidation(false);
       onRefresh(); onBack();
     } catch (error: any) {
@@ -138,6 +146,9 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         .in('id', selectedSeatForAssign);
       if (error) throw error;
       addToast('success', `Asiento ${selectedSeatForAssign.join(', ')} asignado a ${registro.nombre}`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'asiento_asignado', detail: `${registro.nombre} → ${selectedSeatForAssign.join(', ')}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
       setSelectedSeatForAssign([]);
       onRefresh(); onBack();
     } catch (error: any) {
@@ -184,7 +195,12 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
 
       const seatMsg = selectedSeatForAssign.length > 0 ? ` Asiento: ${selectedSeatForAssign.join(', ')}` : '';
       addToast('success', `Abono de $${monto.toLocaleString()} registrado. ${isLiquidating ? `¡Boleto liquidado!${seatMsg}` : ''}`);
-      setMontoAbono(''); setReferencia(''); setSelectedSeatForAssign([]);
+
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'pago_registrado',
+          detail: `$${monto.toLocaleString()} ${metodoPago} — ${registro.nombre}${isLiquidating ? ' (LIQUIDADO)' : ''}${seatMsg}`,
+          eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }      setMontoAbono(''); setReferencia(''); setSelectedSeatForAssign([]);
       onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error: ${error.message}`);
@@ -201,6 +217,9 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         .eq('id', registro.id);
       if (error) throw error;
       addToast('success', 'Registro actualizado');
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_editado', detail: `${registro.nombre} → ${editNombre.trim()}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
       setEditing(false); onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error: ${error.message}`);
@@ -215,6 +234,9 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
       const { error } = await supabase.from('registros').delete().eq('id', registro.id);
       if (error) throw error;
       addToast('success', `Registro de "${registro.nombre}" eliminado`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_eliminado', detail: registro.nombre, eventoId: registro.evento_id || undefined });
+      }
       onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error al eliminar: ${error.message}`);

@@ -10,7 +10,9 @@ export interface Registro {
   nombre: string;
   telefono: string | null;
   correo: string | null;
+  whatsapp: string | null;
   nacion_id: string | null;
+  equipo_id: string | null;
   status: 'pendiente' | 'abono' | 'liquidado';
   monto_total: number;
   monto_pagado: number;
@@ -26,8 +28,16 @@ export interface Registro {
   updated_at: string;
   // Joined
   nacion?: Nacion;
+  equipo?: EquipoEvento;
   asientos?: Asiento[];
   pagos?: Pago[];
+}
+
+export interface EquipoEvento {
+  id: string;
+  evento_id: string;
+  nombre: string;
+  color: string;
 }
 
 export interface Asiento {

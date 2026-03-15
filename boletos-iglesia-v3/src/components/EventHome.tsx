@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { METODOS_PAGO } from '@/lib/constants';
+import { applyTheme, getTheme, resetTheme } from '@/lib/themes';
 import type { Nacion, Registro, Asiento, MetodoPago } from '@/types';
 import SeatMap from '@/components/SeatMap';
 import RegistrosList from '@/components/RegistrosList';
@@ -29,6 +30,13 @@ interface Evento {
 
 export default function EventHome({ evento, onBack }: { evento: Evento; onBack: () => void }) {
   const [tab, setTab] = useState<Tab>('registros');
+  const theme = getTheme(evento.slug);
+
+  // Apply event theme
+  useEffect(() => {
+    applyTheme(evento.slug);
+    return () => { resetTheme(); };
+  }, [evento.slug]);
   const [naciones, setNaciones] = useState<Nacion[]>([]);
   const [asientos, setAsientos] = useState<Asiento[]>([]);
   const [registros, setRegistros] = useState<Registro[]>([]);
@@ -213,8 +221,10 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
       <header className="border-b" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
         <div className="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg border hover:border-cyan-500 transition-all"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+            <button onClick={onBack} className="text-sm px-3 py-1.5 rounded-lg border transition-all"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = theme.accent)}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}>
               ← Eventos
             </button>
             <div>

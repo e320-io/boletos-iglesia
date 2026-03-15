@@ -119,12 +119,16 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
     setLoading(true);
     try {
-      const pagoPorBoleto = montoAbono / numBoletos;
-      const statusPorBoleto = pagoPorBoleto >= precioBoleto ? 'liquidado' : pagoPorBoleto > 0 ? 'abono' : 'pendiente';
+      // Distribute payment evenly without decimals
+      const basePerBoleto = Math.floor(montoAbono / numBoletos);
+      const remainder = montoAbono - (basePerBoleto * numBoletos);
+      // First boleto gets the extra cents/pesos
+      const pagos: number[] = Array(numBoletos).fill(basePerBoleto);
+      pagos[0] += remainder;
 
       // Build names for each boleto
       const boletoNames: string[] = [];
-      boletoNames.push(nombre.trim()); // First boleto always uses main name
+      boletoNames.push(nombre.trim());
       for (let i = 1; i < numBoletos; i++) {
         const guestName = guestNames[i - 1]?.trim();
         if (guestName) {
@@ -138,27 +142,32 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
       // Create one registro per boleto
       for (let i = 0; i < numBoletos; i++) {
+        const pagoBoleto = pagos[i];
+        const statusBoleto = pagoBoleto >= precioBoleto ? 'liquidado' : pagoBoleto > 0 ? 'abono' : 'pendiente';
+
         const { data: registro, error: regError } = await supabase
           .from('registros')
           .insert({
-            nombre: boletoNames[i], telefono: telefono.trim() || null, correo: correo.trim() || null,
-            nacion_id: nacionId, evento_id: evento.id, tipo, status: statusPorBoleto,
-            monto_total: precioBoleto, monto_pagado: pagoPorBoleto, precio_boleto: precioBoleto,
+            nombre: boletoNames[i], telefono: i === 0 ? (telefono.trim() || null) : null,
+            correo: i === 0 ? (correo.trim() || null) : null,
+            nacion_id: nacionId, evento_id: evento.id, tipo, status: statusBoleto,
+            monto_total: precioBoleto, monto_pagado: pagoBoleto, precio_boleto: precioBoleto,
+            notas: numBoletos > 1 ? `Grupo de ${nombre.trim()} (${numBoletos} boletos)` : null,
           })
           .select().single();
         if (regError) throw regError;
         createdIds.push(registro.id);
 
         // Assign seat if liquidado and seats available
-        if (statusPorBoleto === 'liquidado' && evento.tiene_asientos && selectedSeats[i]) {
+        if (statusBoleto === 'liquidado' && evento.tiene_asientos && selectedSeats[i]) {
           const { error: seatError } = await supabase
             .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).eq('id', selectedSeats[i]);
           if (seatError) throw seatError;
         }
 
         // Record individual payment
-        if (pagoPorBoleto > 0) {
-          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoPorBoleto, metodo_pago: metodoPago });
+        if (pagoBoleto > 0) {
+          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoBoleto, metodo_pago: metodoPago });
         }
       }
 
@@ -168,12 +177,14 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
       }
 
       let msg = `${numBoletos} boleto${numBoletos > 1 ? 's' : ''} registrado${numBoletos > 1 ? 's' : ''} para ${nombre}. `;
-      if (statusPorBoleto === 'liquidado' && selectedSeats.length > 0) {
+      const allLiquidados = pagos.every(p => p >= precioBoleto);
+      const anyAbono = pagos.some(p => p > 0 && p < precioBoleto);
+      if (allLiquidados && selectedSeats.length > 0) {
         msg += `¡Liquidado${numBoletos > 1 ? 's' : ''}! Asientos: ${selectedSeats.join(', ')}`;
-      } else if (statusPorBoleto === 'liquidado') {
+      } else if (allLiquidados) {
         msg += `¡Liquidado${numBoletos > 1 ? 's' : ''}!`;
-      } else if (statusPorBoleto === 'abono') {
-        msg += `Abono de $${pagoPorBoleto.toLocaleString()} por boleto.`;
+      } else if (anyAbono) {
+        msg += `Abono de $${montoAbono.toLocaleString()} distribuido en ${numBoletos} boletos.`;
       } else {
         msg += 'Pendiente de pago.';
       }
@@ -437,7 +448,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos}
+            tieneAsientos={evento.tiene_asientos} allRegistros={registros}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 

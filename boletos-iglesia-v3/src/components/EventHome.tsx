@@ -234,6 +234,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                     <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
+                  {evento.slug === 'encuentro' && (
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -246,6 +247,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                       ))}
                     </div>
                   </div>
+                  )}
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
                     <select value={nacionId} onChange={e => setNacionId(e.target.value)}
@@ -321,7 +323,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
         {tab === 'registros' && !selectedRegistro && (
           <RegistrosList registros={registros} naciones={naciones} onSelect={setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} eventoId={evento.id} addToast={addToast} />
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} />
         )}
 
         {tab === 'registros' && selectedRegistro && (

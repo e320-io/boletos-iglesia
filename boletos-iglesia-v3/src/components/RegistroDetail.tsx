@@ -119,9 +119,10 @@ export default function RegistroDetail({ registro, naciones, onBack, onRefresh, 
     if (!registro.correo) { addToast('error', 'No hay correo registrado'); return; }
     try {
       const res = await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: registro.id }) });
+      const data = await res.json();
       if (res.ok) addToast('success', 'Comprobante enviado');
-      else addToast('error', 'Error al enviar correo');
-    } catch { addToast('error', 'Error al enviar correo'); }
+      else addToast('error', `Error: ${data.error || 'No se pudo enviar'}`);
+    } catch (err: any) { addToast('error', `Error de red: ${err.message}`); }
   };
 
   const statusColors: Record<string, string> = {

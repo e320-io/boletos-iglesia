@@ -43,7 +43,6 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
   const [correo, setCorreo] = useState('');
   const [nacionId, setNacionId] = useState('');
   const [tipo, setTipo] = useState('Encuentrista');
-  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [precioBoleto, setPrecioBoleto] = useState(evento.precio_default);
@@ -86,17 +85,14 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
   const resetForm = () => {
     setNombre(''); setTelefono(''); setCorreo(''); setNacionId('');
-    setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo');
-    setTipo('Encuentrista');
+    setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
   };
 
   const handleSubmit = async () => {
     if (!nombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
     if (!nacionId) { addToast('error', 'Selecciona una nación'); return; }
-    if (evento.tiene_asientos && selectedSeats.length === 0) { addToast('error', 'Selecciona al menos un asiento'); return; }
 
-    const numBoletos = evento.tiene_asientos ? selectedSeats.length : 1;
-    const montoTotal = numBoletos * precioBoleto;
+    const montoTotal = precioBoleto;
     const montoAbono = parseFloat(montoPago) || 0;
 
     if (montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
@@ -115,11 +111,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         .select().single();
       if (regError) throw regError;
 
-      if (evento.tiene_asientos && selectedSeats.length > 0) {
-        const { error: seatError } = await supabase
-          .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeats);
-        if (seatError) throw seatError;
-      }
+      // NO seat assignment at registration — seats are assigned separately once liquidado
 
       if (montoAbono > 0) {
         await supabase.from('pagos').insert({ registro_id: registro.id, monto: montoAbono, metodo_pago: metodoPago });
@@ -129,7 +121,17 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         try { await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: registro.id }) }); } catch {}
       }
 
-      addToast('success', `Registro creado para ${nombre}. ${status === 'liquidado' ? '¡Boleto liquidado!' : status === 'abono' ? 'Abono registrado.' : 'Pendiente de pago.'}`);
+      let msg = `Registro creado para ${nombre}. `;
+      if (status === 'liquidado' && evento.tiene_asientos) {
+        msg += '¡Boleto liquidado! Ahora asígnale un asiento desde su perfil.';
+      } else if (status === 'liquidado') {
+        msg += '¡Boleto liquidado!';
+      } else if (status === 'abono') {
+        msg += 'Abono registrado.';
+      } else {
+        msg += 'Pendiente de pago.';
+      }
+      addToast('success', msg);
       resetForm();
       fetchData();
     } catch (error: any) {
@@ -139,13 +141,8 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
     }
   };
 
-  const handleSeatClick = (seatId: string) => {
-    setSelectedSeats(prev => prev.includes(seatId) ? prev.filter(s => s !== seatId) : [...prev, seatId]);
-  };
-
-  const montoTotal = (evento.tiene_asientos ? selectedSeats.length : 1) * precioBoleto;
+  const montoTotal = precioBoleto;
   const montoAbono = parseFloat(montoPago) || 0;
-  const saldoRestante = Math.max(0, montoTotal - montoAbono);
 
   const BlurValue = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <span className={className} style={privacyMode ? { filter: 'blur(8px)', userSelect: 'none' } : {}}>{children}</span>
@@ -210,112 +207,102 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
       <main className="max-w-[1600px] mx-auto p-6">
         {tab === 'nuevo' && (
-          <div className={`grid grid-cols-1 ${evento.tiene_asientos ? 'xl:grid-cols-[1fr_420px]' : 'max-w-xl mx-auto'} gap-6`}>
+          <div className={`${evento.tiene_asientos ? 'grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6' : 'max-w-xl mx-auto space-y-4'}`}>
             {evento.tiene_asientos && (
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>Mapa de Asientos</h2>
                   <div className="flex gap-4 text-xs">
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Seleccionado</span>
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-900/30 border border-red-900/30 opacity-50"></span>No disponible</span>
                   </div>
                 </div>
-                <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={handleSeatClick} />
+                <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                  👀 Vista de referencia — El asiento se asigna desde el perfil de la persona una vez que su boleto esté liquidado.
+                </div>
+                <SeatMap asientos={asientos} selectedSeats={[]} onSeatClick={() => {}} readOnly={true} />
               </div>
             )}
 
             <div className="space-y-4">
-              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Datos del Registro</h2>
-                <div className="space-y-4">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
-                    <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Datos del Registro</h2>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
+                  <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                </div>
+                {evento.slug === 'encuentro' && (
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['Encuentrista', 'Servidor'].map(t => (
+                      <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : evento.precio_default); }}
+                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                        style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                        {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${evento.precio_default})`}
+                      </button>
+                    ))}
                   </div>
-                  {evento.slug === 'encuentro' && (
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {['Encuentrista', 'Servidor'].map(t => (
-                        <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : evento.precio_default); }}
-                          className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${evento.precio_default})`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  )}
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
-                    <select value={nacionId} onChange={e => setNacionId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                      <option value="">Seleccionar nación...</option>
-                      {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
-                    <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
-                    <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
-                  {evento.tiene_asientos && (
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Asientos</label>
-                      <div className="min-h-[40px] px-3 py-2 rounded-lg border flex flex-wrap gap-2" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)' }}>
-                        {selectedSeats.length === 0 ? <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Selecciona en el mapa ←</span>
-                          : selectedSeats.sort().map(s => (
-                            <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>
-                              {s}<button onClick={() => handleSeatClick(s)} className="ml-1 opacity-60 hover:opacity-100">×</button>
-                            </span>))}
-                      </div>
-                    </div>
-                  )}
+                </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
+                  <select value={nacionId} onChange={e => setNacionId(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                    <option value="">Seleccionar nación...</option>
+                    {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
+                  <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
+                  <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                 </div>
               </div>
+            </div>
 
-              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
-                <div className="space-y-4">
-                  <div className="flex justify-between items-center py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Total</span>
-                    <span className="text-xl font-bold">${montoTotal.toLocaleString()}</span>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {METODOS_PAGO.map(m => (
-                        <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                          className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          <span>{m.icon}</span><span>{m.label}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
-                      <input type="number" value={montoPago} onChange={e => setMontoPago(e.target.value)} placeholder={montoTotal.toString()}
-                        className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                    </div>
-                    <button onClick={() => setMontoPago(montoTotal.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Pagar total</button>
-                  </div>
-                  <button onClick={handleSubmit}
-                    disabled={loading || !nombre.trim() || !nacionId || (evento.tiene_asientos && selectedSeats.length === 0)}
-                    className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
-                    style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
-                    {loading ? 'Procesando...' : 'Registrar'}
-                  </button>
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
+              <div className="space-y-4">
+                <div className="flex justify-between items-center py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                  <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Total</span>
+                  <span className="text-xl font-bold">${montoTotal.toLocaleString()}</span>
                 </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {METODOS_PAGO.map(m => (
+                      <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
+                        className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                        style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                        <span>{m.icon}</span><span>{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                    <input type="number" value={montoPago} onChange={e => setMontoPago(e.target.value)} placeholder={montoTotal.toString()}
+                      className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  <button onClick={() => setMontoPago(montoTotal.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Pagar total</button>
+                </div>
+                <button onClick={handleSubmit}
+                  disabled={loading || !nombre.trim() || !nacionId}
+                  className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
+                  style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
+                  {loading ? 'Procesando...' : 'Registrar'}
+                </button>
               </div>
             </div>
           </div>
@@ -327,7 +314,8 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         )}
 
         {tab === 'registros' && selectedRegistro && (
-          <RegistroDetail registro={selectedRegistro} naciones={naciones}
+          <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
+            tieneAsientos={evento.tiene_asientos}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 

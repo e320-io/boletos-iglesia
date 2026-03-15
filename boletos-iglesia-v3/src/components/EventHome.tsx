@@ -43,6 +43,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
   const [correo, setCorreo] = useState('');
   const [nacionId, setNacionId] = useState('');
   const [tipo, setTipo] = useState('Encuentrista');
+  const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [precioBoleto, setPrecioBoleto] = useState(evento.precio_default);
@@ -85,17 +86,30 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
   const resetForm = () => {
     setNombre(''); setTelefono(''); setCorreo(''); setNacionId('');
-    setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
+    setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
+  };
+
+  // Computed: is this registration going to be liquidado?
+  const montoTotal = precioBoleto;
+  const montoAbono = parseFloat(montoPago) || 0;
+  const willBeLiquidado = montoAbono >= montoTotal;
+
+  const handleSeatClick = (seatId: string) => {
+    setSelectedSeats(prev =>
+      prev.includes(seatId) ? prev.filter(s => s !== seatId) : [...prev, seatId]
+    );
   };
 
   const handleSubmit = async () => {
     if (!nombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
     if (!nacionId) { addToast('error', 'Selecciona una nación'); return; }
-
-    const montoTotal = precioBoleto;
-    const montoAbono = parseFloat(montoPago) || 0;
-
     if (montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
+
+    // If liquidando with seats available, require seat selection
+    if (willBeLiquidado && evento.tiene_asientos && selectedSeats.length === 0) {
+      addToast('error', 'Selecciona un asiento en el mapa — el boleto se está liquidando');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -111,7 +125,12 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
         .select().single();
       if (regError) throw regError;
 
-      // NO seat assignment at registration — seats are assigned separately once liquidado
+      // Assign seats only if liquidado
+      if (status === 'liquidado' && evento.tiene_asientos && selectedSeats.length > 0) {
+        const { error: seatError } = await supabase
+          .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeats);
+        if (seatError) throw seatError;
+      }
 
       if (montoAbono > 0) {
         await supabase.from('pagos').insert({ registro_id: registro.id, monto: montoAbono, metodo_pago: metodoPago });
@@ -122,12 +141,12 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
       }
 
       let msg = `Registro creado para ${nombre}. `;
-      if (status === 'liquidado' && evento.tiene_asientos) {
-        msg += '¡Boleto liquidado! Ahora asígnale un asiento desde su perfil.';
+      if (status === 'liquidado' && selectedSeats.length > 0) {
+        msg += `¡Boleto liquidado! Asiento: ${selectedSeats.join(', ')}`;
       } else if (status === 'liquidado') {
         msg += '¡Boleto liquidado!';
       } else if (status === 'abono') {
-        msg += 'Abono registrado.';
+        msg += 'Abono registrado. El asiento se asigna al liquidar.';
       } else {
         msg += 'Pendiente de pago.';
       }
@@ -140,9 +159,6 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
       setLoading(false);
     }
   };
-
-  const montoTotal = precioBoleto;
-  const montoAbono = parseFloat(montoPago) || 0;
 
   const BlurValue = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <span className={className} style={privacyMode ? { filter: 'blur(8px)', userSelect: 'none' } : {}}>{children}</span>
@@ -207,104 +223,128 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
       <main className="max-w-[1600px] mx-auto p-6">
         {tab === 'nuevo' && (
-          <div className={`${evento.tiene_asientos ? 'grid grid-cols-1 xl:grid-cols-[1fr_420px] gap-6' : 'max-w-xl mx-auto space-y-4'}`}>
+          <div className={`grid grid-cols-1 ${evento.tiene_asientos ? 'xl:grid-cols-[1fr_420px]' : 'max-w-xl mx-auto'} gap-6`}>
+            {/* Seat map — always visible, interactive only when liquidando */}
             {evento.tiene_asientos && (
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>Mapa de Asientos</h2>
+                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                    {willBeLiquidado ? 'Selecciona Asiento' : 'Mapa de Asientos'}
+                  </h2>
                   <div className="flex gap-4 text-xs">
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
+                    {willBeLiquidado && (
+                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Seleccionado</span>
+                    )}
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-red-900/30 border border-red-900/30 opacity-50"></span>No disponible</span>
                   </div>
                 </div>
-                <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
-                  👀 Vista de referencia — El asiento se asigna desde el perfil de la persona una vez que su boleto esté liquidado.
-                </div>
-                <SeatMap asientos={asientos} selectedSeats={[]} onSeatClick={() => {}} readOnly={true} />
+                {willBeLiquidado && selectedSeats.length > 0 && (
+                  <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
+                    ✓ Asiento seleccionado: {selectedSeats.map(s => (
+                      <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                    ))}
+                  </div>
+                )}
+                {!willBeLiquidado && (
+                  <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                    👀 Vista de referencia — Liquida el boleto para seleccionar asiento.
+                  </div>
+                )}
+                <SeatMap asientos={asientos} selectedSeats={willBeLiquidado ? selectedSeats : []}
+                  onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} readOnly={!willBeLiquidado} />
               </div>
             )}
 
+            {/* Form */}
             <div className="space-y-4">
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Datos del Registro</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
-                  <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
-                {evento.slug === 'encuentro' && (
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Encuentrista', 'Servidor'].map(t => (
-                      <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : evento.precio_default); }}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                        style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                        {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${evento.precio_default})`}
-                      </button>
-                    ))}
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Datos del Registro</h2>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
+                    <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  {evento.slug === 'encuentro' && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['Encuentrista', 'Servidor'].map(t => (
+                          <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : evento.precio_default); }}
+                            className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${evento.precio_default})`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
+                    <select value={nacionId} onChange={e => setNacionId(e.target.value)}
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                      <option value="">Seleccionar nación...</option>
+                      {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
+                    <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
+                    <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
                 </div>
-                )}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
-                  <select value={nacionId} onChange={e => setNacionId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                    <option value="">Seleccionar nación...</option>
-                    {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
-                  <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
-                  <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
               </div>
-            </div>
 
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
-              <div className="space-y-4">
-                <div className="flex justify-between items-center py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Total</span>
-                  <span className="text-xl font-bold">${montoTotal.toLocaleString()}</span>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {METODOS_PAGO.map(m => (
-                      <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                        className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                        style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                        <span>{m.icon}</span><span>{m.label}</span>
-                      </button>
-                    ))}
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Total</span>
+                    <span className="text-xl font-bold">${montoTotal.toLocaleString()}</span>
                   </div>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
-                    <input type="number" value={montoPago} onChange={e => setMontoPago(e.target.value)} placeholder={montoTotal.toString()}
-                      className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {METODOS_PAGO.map(m => (
+                        <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
+                          className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                          style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                          <span>{m.icon}</span><span>{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                  <button onClick={() => setMontoPago(montoTotal.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Pagar total</button>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                      <input type="number" value={montoPago} onChange={e => setMontoPago(e.target.value)} placeholder={montoTotal.toString()}
+                        className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                    <button onClick={() => setMontoPago(montoTotal.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Pagar total</button>
+                  </div>
+
+                  {/* Hint: seat map will appear when liquidando */}
+                  {evento.tiene_asientos && !willBeLiquidado && montoAbono > 0 && (
+                    <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                      💡 El asiento se asigna al liquidar el boleto. Completa el pago total para seleccionar lugar.
+                    </div>
+                  )}
+
+                  <button onClick={handleSubmit}
+                    disabled={loading || !nombre.trim() || !nacionId}
+                    className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
+                    style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
+                    {loading ? 'Procesando...' : willBeLiquidado && evento.tiene_asientos ? 'Liquidar y Asignar Asiento' : 'Registrar'}
+                  </button>
                 </div>
-                <button onClick={handleSubmit}
-                  disabled={loading || !nombre.trim() || !nacionId}
-                  className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
-                  style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
-                  {loading ? 'Procesando...' : 'Registrar'}
-                </button>
               </div>
-            </div>
             </div>
           </div>
         )}

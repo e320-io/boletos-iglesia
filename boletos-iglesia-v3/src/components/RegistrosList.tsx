@@ -11,11 +11,12 @@ interface Props {
   onRefresh: () => void;
   privacyMode?: boolean;
   showCheckIn?: boolean;
+  showCheckIn2?: boolean;
   eventoId?: string;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, eventoId, addToast }: Props) {
+export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast }: Props) {
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterNacion, setFilterNacion] = useState<string>('todos');
@@ -128,8 +129,8 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             <option value="todos">Check-in: Todos</option>
             <option value="checked_1">✓ Día 1: Con check-in</option>
             <option value="unchecked_1">✗ Día 1: Sin check-in</option>
-            <option value="checked_2">✓ Día 2: Con check-in</option>
-            <option value="unchecked_2">✗ Día 2: Sin check-in</option>
+            {showCheckIn2 && <option value="checked_2">✓ Día 2: Con check-in</option>}
+            {showCheckIn2 && <option value="unchecked_2">✗ Día 2: Sin check-in</option>}
           </select>
         )}
         <button onClick={() => setShowCorte(!showCorte)}
@@ -331,12 +332,14 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             <div className="flex gap-3">
               <div>
                 <div className="text-lg font-bold text-emerald-400">{checkedInCount}</div>
-                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Día 1</div>
+                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>{showCheckIn2 ? 'Día 1' : 'Check-in'}</div>
               </div>
-              <div className="border-l pl-3" style={{ borderColor: 'var(--color-border)' }}>
-                <div className="text-lg font-bold text-orange-400">{checkedIn2Count}</div>
-                <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Día 2</div>
-              </div>
+              {showCheckIn2 && (
+                <div className="border-l pl-3" style={{ borderColor: 'var(--color-border)' }}>
+                  <div className="text-lg font-bold text-orange-400">{checkedIn2Count}</div>
+                  <div className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>Día 2</div>
+                </div>
+              )}
             </div>
             <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Check-in</div>
           </div>
@@ -360,8 +363,8 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
         <table className="w-full text-sm">
           <thead>
             <tr style={{ background: 'var(--color-bg)' }}>
-              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#10b981' }}>Día 1</th>}
-              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
+              {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#10b981' }}>{showCheckIn2 ? 'Día 1' : 'Check-in'}</th>}
+              {showCheckIn2 && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nombre</th>
               {hasTipos && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
@@ -386,7 +389,7 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
                           isCheckedIn ? 'bg-emerald-500 border-emerald-400 text-white' : 'border-slate-600 text-transparent hover:border-slate-400'}`}>✓</button>
                     </td>
                   )}
-                  {showCheckIn && (
+                  {showCheckIn2 && (
                     <td className="text-center px-3 py-3">
                       <button onClick={(e) => handleCheckIn2(e, r)}
                         className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all text-sm font-bold ${

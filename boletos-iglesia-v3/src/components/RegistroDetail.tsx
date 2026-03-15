@@ -89,6 +89,17 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         }
       }
 
+      // Send group confirmation email
+      if (registro.correo) {
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registroId: registro.id, grupoIds: grupoBoletos.map(b => b.id) }),
+          });
+        } catch {}
+      }
+
       addToast('success', `¡${grupoBoletos.length} boletos liquidados! ${groupSeats.length > 0 ? 'Asientos: ' + groupSeats.join(', ') : ''}`);
       setShowGroupLiquidation(false);
       onRefresh(); onBack();

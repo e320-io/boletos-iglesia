@@ -8,15 +8,114 @@ interface Props {
   naciones: Nacion[];
   eventoFecha?: string;
   eventoNombre?: string;
+  isFreeEvent?: boolean;
+  equipos?: any[];
 }
 
-export default function Dashboard({ registros, asientos, naciones, eventoFecha, eventoNombre }: Props) {
+export default function Dashboard({ registros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [] }: Props) {
 
   const totalRegistrados = registros.length;
+  const checkedIn = registros.filter(r => r.checked_in).length;
+
+  // Free event dashboard
+  if (isFreeEvent) {
+    const equipoStats = equipos.map(eq => {
+      const count = registros.filter(r => r.equipo_id === eq.id).length;
+      return { ...eq, count };
+    }).sort((a, b) => b.count - a.count);
+    const maxCount = Math.max(...equipoStats.map(e => e.count), 1);
+
+    const diasParaEvento = eventoFecha
+      ? Math.ceil((new Date(eventoFecha + 'T12:00:00').getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+      : null;
+
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+              📊 Dashboard — {eventoNombre || 'Evento'}
+            </h2>
+            <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Resumen de registros</p>
+          </div>
+        </div>
+
+        {/* KPIs */}
+        <div className="grid grid-cols-3 gap-4">
+          {diasParaEvento !== null && diasParaEvento > 0 && (
+            <div className="rounded-xl p-6 border text-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="text-4xl font-bold" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-display)' }}>{diasParaEvento}</div>
+              <div className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Días para el evento</div>
+            </div>
+          )}
+          <div className="rounded-xl p-6 border text-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-4xl font-bold" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-display)' }}>{totalRegistrados}</div>
+            <div className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Total Registrados</div>
+          </div>
+          <div className="rounded-xl p-6 border text-center" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-4xl font-bold text-emerald-400" style={{ fontFamily: 'var(--font-display)' }}>{checkedIn}</div>
+            <div className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>Check-in</div>
+          </div>
+        </div>
+
+        {/* Equipo breakdown */}
+        <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <h3 className="font-bold mb-6" style={{ fontFamily: 'var(--font-display)' }}>Registrados por Equipo</h3>
+          <div className="space-y-4">
+            {equipoStats.map(eq => (
+              <div key={eq.id}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-3 h-3 rounded-full" style={{ background: eq.color }} />
+                    <span className="text-sm font-medium">{eq.nombre}</span>
+                  </div>
+                  <span className="text-lg font-bold" style={{ color: 'var(--color-accent)', fontFamily: 'var(--font-display)' }}>{eq.count}</span>
+                </div>
+                <div className="w-full h-4 rounded-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
+                  <div className="h-full rounded-full transition-all duration-700"
+                    style={{ width: `${(eq.count / maxCount) * 100}%`, background: eq.color, minWidth: eq.count > 0 ? '8px' : '0' }} />
+                </div>
+              </div>
+            ))}
+          </div>
+          {equipoStats.length === 0 && (
+            <p className="text-sm text-center py-4" style={{ color: 'var(--color-text-muted)' }}>No hay equipos configurados</p>
+          )}
+        </div>
+
+        {/* Recent registrations */}
+        <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Últimos Registros</h3>
+          <div className="space-y-2">
+            {registros.slice(0, 10).map(r => {
+              const equipo = equipos.find(e => e.id === r.equipo_id);
+              return (
+                <div key={r.id} className="flex items-center justify-between py-2 px-3 rounded-lg" style={{ background: 'var(--color-bg)' }}>
+                  <div className="flex items-center gap-3">
+                    <span className="font-medium text-sm">{r.nombre}</span>
+                    {equipo && (
+                      <span className="flex items-center gap-1.5 text-xs px-2 py-0.5 rounded-full" style={{ background: equipo.color + '25', color: equipo.color }}>
+                        <span className="w-1.5 h-1.5 rounded-full" style={{ background: equipo.color }} />
+                        {equipo.nombre.split(' ').slice(0, 3).join(' ')}
+                      </span>
+                    )}
+                  </div>
+                  <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    {new Date(r.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Paid event dashboard (existing)
   const boletosLiquidados = registros.filter(r => r.status === 'liquidado').length;
   const boletosAbono = registros.filter(r => r.status === 'abono').length;
   const boletosPendientes = registros.filter(r => r.status === 'pendiente').length;
-  const checkedIn = registros.filter(r => (r as any).checked_in).length;
 
   const hasAsientos = asientos.length > 0;
   const totalAsientosOcupados = asientos.filter(a => a.estado === 'ocupado').length;

@@ -33,7 +33,7 @@ interface Evento {
 export default function EventHome({ evento, onBack, userRole = 'registro' }: { evento: Evento; onBack: () => void; userRole?: string }) {
   const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : 'registros');
   const theme = getTheme(evento.slug);
-  const canRegister = userRole === 'admin' || userRole === 'registro';
+  const canRegister = userRole === 'admin' || userRole === 'registro' || userRole === 'evento';
   const canSeeDashboard = userRole === 'admin' || userRole === 'dueno';
   const { user } = useAuth();
 
@@ -54,7 +54,9 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const [nombre, setNombre] = useState('');
   const [telefono, setTelefono] = useState('');
   const [correo, setCorreo] = useState('');
+  const [whatsapp, setWhatsapp] = useState('');
   const [nacionId, setNacionId] = useState('');
+  const [equipoId, setEquipoId] = useState('');
   const [tipo, setTipo] = useState('Encuentrista');
   const [numBoletos, setNumBoletos] = useState(1);
   const [guestNames, setGuestNames] = useState<string[]>([]);
@@ -63,6 +65,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [precioBoleto, setPrecioBoleto] = useState(evento.precio_default);
 
+  // Equipos for events like HollyFest
+  const [equipos, setEquipos] = useState<any[]>([]);
+  const isFreeEvent = evento.precio_default === 0;
+
   const addToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, type, message }]);
@@ -70,20 +76,23 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   }, []);
 
   const fetchData = useCallback(async () => {
-    const [nacionesRes, asientosRes, registrosRes] = await Promise.all([
+    const [nacionesRes, equiposRes, asientosRes, registrosRes] = await Promise.all([
       supabase.from('naciones').select('*').order('nombre'),
+      supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre'),
       evento.tiene_asientos
         ? supabase.from('asientos').select('*').eq('evento_id', evento.id)
         : Promise.resolve({ data: [] }),
       supabase.from('registros').select(`
         *,
         nacion:naciones(*),
+        equipo:equipos_evento(*),
         asientos(*),
         pagos(*)
       `).eq('evento_id', evento.id).order('created_at', { ascending: false }),
     ]);
 
     if (nacionesRes.data) setNaciones(nacionesRes.data);
+    if (equiposRes.data) setEquipos(equiposRes.data);
     if (asientosRes.data) setAsientos(asientosRes.data as Asiento[]);
     if (registrosRes.data) setRegistros(registrosRes.data);
   }, [evento.id, evento.tiene_asientos]);
@@ -100,14 +109,15 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   }, [fetchData, evento.id]);
 
   const resetForm = () => {
-    setNombre(''); setTelefono(''); setCorreo(''); setNacionId('');
+    setNombre(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
     setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
   };
 
   // Computed: total based on number of boletos
   const montoTotal = precioBoleto * numBoletos;
   const montoAbono = parseFloat(montoPago) || 0;
-  const willBeLiquidado = montoAbono >= montoTotal;
+  const willBeLiquidado = isFreeEvent || montoAbono >= montoTotal;
+  const hasEquipos = equipos.length > 0;
 
   const handleSeatClick = (seatId: string) => {
     setSelectedSeats(prev => {
@@ -119,10 +129,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
   const handleSubmit = async () => {
     if (!nombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
-    if (!nacionId) { addToast('error', 'Selecciona una nación'); return; }
-    if (montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
+    if (!hasEquipos && !nacionId) { addToast('error', 'Selecciona una nación'); return; }
+    if (hasEquipos && !equipoId) { addToast('error', 'Selecciona un equipo'); return; }
+    if (!isFreeEvent && montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
 
-    // If liquidando with seats, require correct number of seats selected
     if (willBeLiquidado && evento.tiene_asientos) {
       if (selectedSeats.length !== numBoletos) {
         addToast('error', `Selecciona ${numBoletos} asiento${numBoletos > 1 ? 's' : ''} en el mapa (tienes ${selectedSeats.length})`);
@@ -132,7 +142,31 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
     setLoading(true);
     try {
-      // Distribute payment evenly without decimals
+      if (isFreeEvent) {
+        // Free event — single registration, no payment
+        const { data: registro, error: regError } = await supabase
+          .from('registros')
+          .insert({
+            nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
+            whatsapp: whatsapp.trim() || null,
+            nacion_id: hasEquipos ? null : nacionId, equipo_id: hasEquipos ? equipoId : null,
+            evento_id: evento.id, tipo: 'general', status: 'liquidado',
+            monto_total: 0, monto_pagado: 0, precio_boleto: 0,
+          })
+          .select().single();
+        if (regError) throw regError;
+
+        if (user) {
+          await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_creado', detail: `${nombre.trim()} (gratuito)`, eventoId: evento.id, registroId: registro.id });
+        }
+
+        addToast('success', `${nombre} registrado en ${evento.nombre}`);
+        resetForm();
+        fetchData();
+        return;
+      }
+
+      // Paid event — existing multi-boleto logic
       const basePerBoleto = Math.floor(montoAbono / numBoletos);
       const remainder = montoAbono - (basePerBoleto * numBoletos);
       // First boleto gets the extra cents/pesos
@@ -239,7 +273,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
               style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
               onMouseEnter={e => (e.currentTarget.style.borderColor = theme.accent)}
               onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}>
-              ← Eventos
+              ← {userRole === 'evento' ? 'Cerrar sesión' : 'Eventos'}
             </button>
             <div>
               <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>{evento.nombre}</h1>
@@ -344,7 +378,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                     <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
-                  {evento.slug === 'encuentro' && (
+                  {evento.slug === 'encuentro' && !isFreeEvent && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -358,6 +392,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </div>
                     </div>
                   )}
+                  {!isFreeEvent && (
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
                     <div className="flex items-center gap-3">
@@ -410,27 +445,60 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </div>
                     </div>
                   )}
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
-                    <select value={nacionId} onChange={e => setNacionId(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                      <option value="">Seleccionar nación...</option>
-                      {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
-                    <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
-                    <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
+                  )}
+                  {/* Equipo selector (for events with equipos like HollyFest) */}
+                  {hasEquipos && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Equipo *</label>
+                      <div className="space-y-2">
+                        {equipos.map(eq => (
+                          <button key={eq.id} onClick={() => setEquipoId(eq.id)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all flex items-center gap-3 ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
+                            {eq.nombre}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {/* Nación selector (for events without equipos) */}
+                  {!hasEquipos && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
+                      <select value={nacionId} onChange={e => setNacionId(e.target.value)}
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                        <option value="">Seleccionar nación...</option>
+                        {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+                      </select>
+                    </div>
+                  )}
+                  {/* WhatsApp (for events that use it) */}
+                  {hasEquipos && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>WhatsApp *</label>
+                      <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="10 dígitos"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                  )}
+                  {!hasEquipos && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
+                      <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                  )}
+                  {!hasEquipos && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
+                      <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                  )}
                 </div>
               </div>
 
+              {!isFreeEvent && (
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
                 <div className="space-y-4">
@@ -470,13 +538,24 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                   )}
 
                   <button onClick={handleSubmit}
-                    disabled={loading || !nombre.trim() || !nacionId}
+                    disabled={loading || !nombre.trim() || (!hasEquipos && !nacionId) || (hasEquipos && !equipoId)}
                     className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
                     style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                     {loading ? 'Procesando...' : willBeLiquidado && evento.tiene_asientos ? 'Liquidar y Asignar Asiento' : 'Registrar'}
                   </button>
                 </div>
               </div>
+              )}
+
+              {/* Submit button for free events (outside payment card) */}
+              {isFreeEvent && (
+                <button onClick={handleSubmit}
+                  disabled={loading || !nombre.trim() || (hasEquipos && !equipoId) || (!hasEquipos && !nacionId)}
+                  className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
+                  style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
+                  {loading ? 'Procesando...' : 'Registrar'}
+                </button>
+              )}
             </div>
           </div>
         )}

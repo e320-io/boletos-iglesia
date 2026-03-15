@@ -66,34 +66,34 @@ export const EVENT_THEMES: Record<string, EventTheme> = {
     isDark: true,
   },
 
-  // Legacy Women — editorial, elegant, warm
+  // Legacy Women — same dark UI, custom seat colors
   'legacy-women': {
-    bg: '#f5f0ea',
-    surface: '#ffffff',
-    surfaceHover: '#faf7f4',
-    border: '#e0d5c7',
-    accent: '#6b4c3b',
-    accentGlow: 'rgba(107, 76, 59, 0.12)',
-    accentDark: '#4a3428',
-    success: '#6b8f5e',
-    warning: '#c49a4a',
-    danger: '#b85450',
-    text: '#2c1f16',
-    textMuted: '#8c7b6b',
-    fontDisplay: "'Playfair Display', serif",
-    fontBody: "'Source Sans 3', sans-serif",
-    fontImport: 'https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,500;0,600;0,700;0,800;0,900;1,400;1,700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap',
-    seatAvailable: 'rgba(107, 143, 94, 0.15)',
-    seatAvailableHover: 'rgba(107, 143, 94, 0.3)',
-    seatOccupied: 'rgba(107, 76, 59, 0.2)',
+    bg: '#0a0e1a',
+    surface: '#111827',
+    surfaceHover: '#1a2236',
+    border: '#1e293b',
+    accent: '#00bcd4',
+    accentGlow: 'rgba(0, 188, 212, 0.15)',
+    accentDark: '#0097a7',
+    success: '#10b981',
+    warning: '#f59e0b',
+    danger: '#ef4444',
+    text: '#f1f5f9',
+    textMuted: '#94a3b8',
+    fontDisplay: "'Outfit', sans-serif",
+    fontBody: "'DM Sans', sans-serif",
+    fontImport: 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap',
+    seatAvailable: '#ffffff',
+    seatAvailableHover: '#f0e6d8',
+    seatOccupied: '#00bcd4',
     seatSelected: '#6b4c3b',
     seatSelectedGlow: 'rgba(107, 76, 59, 0.4)',
-    gradient: 'linear-gradient(135deg, #6b4c3b, #4a3428)',
-    gradientButton: 'linear-gradient(135deg, #6b4c3b, #4a3428)',
+    gradient: 'linear-gradient(135deg, #00bcd4, #0097a7)',
+    gradientButton: 'linear-gradient(135deg, #00bcd4, #0097a7)',
     emailHeaderBg: 'linear-gradient(135deg, #6b4c3b, #4a3428)',
     emailAccent: '#6b4c3b',
-    icon: '♛',
-    isDark: false,
+    icon: '✦',
+    isDark: true,
   },
 };
 
@@ -129,17 +129,12 @@ export function applyTheme(slug: string) {
   link.href = theme.fontImport;
   document.head.appendChild(link);
 
-  // Update body classes for light/dark
-  if (theme.isDark) {
-    document.body.classList.add('theme-dark');
-    document.body.classList.remove('theme-light');
-  } else {
-    document.body.classList.add('theme-light');
-    document.body.classList.remove('theme-dark');
-  }
+  // Set event slug as body class for CSS seat overrides
+  document.body.className = slug;
 }
 
 // Reset to default
 export function resetTheme() {
   applyTheme('default');
+  document.body.className = '';
 }

@@ -31,7 +31,6 @@ interface Evento {
 }
 
 export default function EventHome({ evento, onBack, userRole = 'registro' }: { evento: Evento; onBack: () => void; userRole?: string }) {
-  const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : 'registros');
   const theme = getTheme(evento.slug);
   const isFreeEvent = evento.precio_default === 0;
   const canRegister = userRole === 'admin' || userRole === 'registro' || userRole === 'evento';

@@ -85,7 +85,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
         p_password: newPassword,
         p_nombre: newNombre.trim(),
         p_rol: newRol,
-        p_evento_id: newRol === 'evento' && newEventoId ? newEventoId : null,
+        p_evento_id: (newRol === 'evento' || newRol === 'dueno') && newEventoId ? newEventoId : null,
       });
       if (error) throw error;
 
@@ -213,13 +213,15 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               </div>
-              {newRol === 'evento' && (
+              {(newRol === 'evento' || newRol === 'dueno') && (
                 <div className="col-span-2">
-                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Evento asignado *</label>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                    Evento asignado {newRol === 'evento' ? '*' : '(opcional — si no seleccionas, ve todos)'}
+                  </label>
                   <select value={newEventoId} onChange={e => setNewEventoId(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-lg text-sm border"
                     style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                    <option value="">Seleccionar evento...</option>
+                    <option value="">{newRol === 'dueno' ? 'Todos los eventos' : 'Seleccionar evento...'}</option>
                     {eventos.map(e => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
                   </select>
                 </div>

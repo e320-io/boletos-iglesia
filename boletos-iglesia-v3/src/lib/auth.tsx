@@ -6,7 +6,8 @@ export interface User {
   id: string;
   username: string;
   nombre: string;
-  rol: 'admin' | 'registro' | 'dueno';
+  rol: 'admin' | 'registro' | 'dueno' | 'evento';
+  evento_id?: string;
 }
 
 interface AuthContextType {
@@ -46,6 +47,7 @@ function getSessionFromCookie(): User | null {
       username: decoded.username,
       nombre: decoded.nombre,
       rol: decoded.rol,
+      evento_id: decoded.evento_id || undefined,
     };
   } catch {
     return null;

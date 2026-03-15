@@ -16,11 +16,13 @@ interface Props {
   showCheckIn2?: boolean;
   eventoId?: string;
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
+  userRole?: string;
 }
 
-export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast }: Props) {
+export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin' }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
+  const canSeeMoney = userRole !== 'registro';
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterNacion, setFilterNacion] = useState<string>('todos');
   const [filterCheckIn, setFilterCheckIn] = useState<string>('todos');
@@ -363,14 +365,18 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
           <div className="text-2xl font-bold text-emerald-400">{filtered.filter(r => r.status === 'liquidado').length}</div>
           <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Liquidados</div>
         </div>
-        <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-          <div className="text-2xl font-bold text-emerald-400" style={blurStyle}>${totalRecaudado.toLocaleString()}</div>
-          <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Recaudado</div>
-        </div>
-        <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-          <div className="text-2xl font-bold text-amber-400" style={blurStyle}>${totalPorCobrar.toLocaleString()}</div>
-          <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Por cobrar</div>
-        </div>
+        {canSeeMoney && (
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-2xl font-bold text-emerald-400" style={blurStyle}>${totalRecaudado.toLocaleString()}</div>
+            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Recaudado</div>
+          </div>
+        )}
+        {canSeeMoney && (
+          <div className="rounded-xl p-4 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-2xl font-bold text-amber-400" style={blurStyle}>${totalPorCobrar.toLocaleString()}</div>
+            <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Por cobrar</div>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -384,8 +390,8 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
               {hasTipos && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>
-              <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>
+              {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>}
+              {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>}
             </tr>
           </thead>
           <tbody>
@@ -428,10 +434,12 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[r.status]}`}>{statusLabels[r.status]}</span>
                   </td>
-                  <td className="px-4 py-3 text-right font-medium" style={blurStyle}>${Number(r.monto_pagado).toLocaleString()}</td>
-                  <td className="px-4 py-3 text-right" style={blurStyle}>
-                    {saldo > 0 ? <span className="text-amber-400 font-medium">${saldo.toLocaleString()}</span> : <span className="text-emerald-400">$0</span>}
-                  </td>
+                  {canSeeMoney && <td className="px-4 py-3 text-right font-medium" style={blurStyle}>${Number(r.monto_pagado).toLocaleString()}</td>}
+                  {canSeeMoney && (
+                    <td className="px-4 py-3 text-right" style={blurStyle}>
+                      {saldo > 0 ? <span className="text-amber-400 font-medium">${saldo.toLocaleString()}</span> : <span className="text-emerald-400">$0</span>}
+                    </td>
+                  )}
                 </tr>
               );
             })}

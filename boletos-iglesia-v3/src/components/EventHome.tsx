@@ -43,6 +43,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
   const [correo, setCorreo] = useState('');
   const [nacionId, setNacionId] = useState('');
   const [tipo, setTipo] = useState('Encuentrista');
+  const [numBoletos, setNumBoletos] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -86,18 +87,20 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
 
   const resetForm = () => {
     setNombre(''); setTelefono(''); setCorreo(''); setNacionId('');
-    setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
+    setNumBoletos(1); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
   };
 
-  // Computed: is this registration going to be liquidado?
-  const montoTotal = precioBoleto;
+  // Computed: total based on number of boletos
+  const montoTotal = precioBoleto * numBoletos;
   const montoAbono = parseFloat(montoPago) || 0;
   const willBeLiquidado = montoAbono >= montoTotal;
 
   const handleSeatClick = (seatId: string) => {
-    setSelectedSeats(prev =>
-      prev.includes(seatId) ? prev.filter(s => s !== seatId) : [...prev, seatId]
-    );
+    setSelectedSeats(prev => {
+      if (prev.includes(seatId)) return prev.filter(s => s !== seatId);
+      if (prev.length >= numBoletos) return [...prev.slice(1), seatId]; // Replace oldest if at limit
+      return [...prev, seatId];
+    });
   };
 
   const handleSubmit = async () => {
@@ -105,48 +108,59 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
     if (!nacionId) { addToast('error', 'Selecciona una nación'); return; }
     if (montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
 
-    // If liquidando with seats available, require seat selection
-    if (willBeLiquidado && evento.tiene_asientos && selectedSeats.length === 0) {
-      addToast('error', 'Selecciona un asiento en el mapa — el boleto se está liquidando');
-      return;
+    // If liquidando with seats, require correct number of seats selected
+    if (willBeLiquidado && evento.tiene_asientos) {
+      if (selectedSeats.length !== numBoletos) {
+        addToast('error', `Selecciona ${numBoletos} asiento${numBoletos > 1 ? 's' : ''} en el mapa (tienes ${selectedSeats.length})`);
+        return;
+      }
     }
 
     setLoading(true);
     try {
-      const status = montoAbono >= montoTotal ? 'liquidado' : montoAbono > 0 ? 'abono' : 'pendiente';
+      const pagoPorBoleto = montoAbono / numBoletos;
+      const statusPorBoleto = pagoPorBoleto >= precioBoleto ? 'liquidado' : pagoPorBoleto > 0 ? 'abono' : 'pendiente';
 
-      const { data: registro, error: regError } = await supabase
-        .from('registros')
-        .insert({
-          nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
-          nacion_id: nacionId, evento_id: evento.id, tipo, status,
-          monto_total: montoTotal, monto_pagado: montoAbono, precio_boleto: precioBoleto,
-        })
-        .select().single();
-      if (regError) throw regError;
+      const createdIds: string[] = [];
 
-      // Assign seats only if liquidado
-      if (status === 'liquidado' && evento.tiene_asientos && selectedSeats.length > 0) {
-        const { error: seatError } = await supabase
-          .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeats);
-        if (seatError) throw seatError;
+      // Create one registro per boleto
+      for (let i = 0; i < numBoletos; i++) {
+        const { data: registro, error: regError } = await supabase
+          .from('registros')
+          .insert({
+            nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
+            nacion_id: nacionId, evento_id: evento.id, tipo, status: statusPorBoleto,
+            monto_total: precioBoleto, monto_pagado: pagoPorBoleto, precio_boleto: precioBoleto,
+          })
+          .select().single();
+        if (regError) throw regError;
+        createdIds.push(registro.id);
+
+        // Assign seat if liquidado and seats available
+        if (statusPorBoleto === 'liquidado' && evento.tiene_asientos && selectedSeats[i]) {
+          const { error: seatError } = await supabase
+            .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).eq('id', selectedSeats[i]);
+          if (seatError) throw seatError;
+        }
+
+        // Record individual payment
+        if (pagoPorBoleto > 0) {
+          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoPorBoleto, metodo_pago: metodoPago });
+        }
       }
 
-      if (montoAbono > 0) {
-        await supabase.from('pagos').insert({ registro_id: registro.id, monto: montoAbono, metodo_pago: metodoPago });
+      // Send email for first registro only
+      if (correo.trim() && createdIds.length > 0) {
+        try { await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: createdIds[0] }) }); } catch {}
       }
 
-      if (correo.trim()) {
-        try { await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ registroId: registro.id }) }); } catch {}
-      }
-
-      let msg = `Registro creado para ${nombre}. `;
-      if (status === 'liquidado' && selectedSeats.length > 0) {
-        msg += `¡Boleto liquidado! Asiento: ${selectedSeats.join(', ')}`;
-      } else if (status === 'liquidado') {
-        msg += '¡Boleto liquidado!';
-      } else if (status === 'abono') {
-        msg += 'Abono registrado. El asiento se asigna al liquidar.';
+      let msg = `${numBoletos} boleto${numBoletos > 1 ? 's' : ''} registrado${numBoletos > 1 ? 's' : ''} para ${nombre}. `;
+      if (statusPorBoleto === 'liquidado' && selectedSeats.length > 0) {
+        msg += `¡Liquidado${numBoletos > 1 ? 's' : ''}! Asientos: ${selectedSeats.join(', ')}`;
+      } else if (statusPorBoleto === 'liquidado') {
+        msg += `¡Liquidado${numBoletos > 1 ? 's' : ''}!`;
+      } else if (statusPorBoleto === 'abono') {
+        msg += `Abono de $${pagoPorBoleto.toLocaleString()} por boleto.`;
       } else {
         msg += 'Pendiente de pago.';
       }
@@ -229,7 +243,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                    {willBeLiquidado ? 'Selecciona Asiento' : 'Mapa de Asientos'}
+                    {willBeLiquidado ? `Selecciona ${numBoletos} Asiento${numBoletos > 1 ? 's' : ''}` : 'Mapa de Asientos'}
                   </h2>
                   <div className="flex gap-4 text-xs">
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
@@ -241,7 +255,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                 </div>
                 {willBeLiquidado && selectedSeats.length > 0 && (
                   <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
-                    ✓ Asiento seleccionado: {selectedSeats.map(s => (
+                    ✓ {selectedSeats.length}/{numBoletos} seleccionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.map(s => (
                       <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
                     ))}
                   </div>
@@ -281,6 +295,21 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                     </div>
                   )}
                   <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
+                    <div className="flex items-center gap-3">
+                      <button onClick={() => { setNumBoletos(Math.max(1, numBoletos - 1)); setSelectedSeats(prev => prev.slice(0, Math.max(1, numBoletos - 1))); }}
+                        className="w-10 h-10 rounded-lg border text-lg font-bold flex items-center justify-center hover:border-cyan-500 transition-all"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>−</button>
+                      <span className="text-2xl font-bold w-10 text-center" style={{ fontFamily: 'var(--font-display)' }}>{numBoletos}</span>
+                      <button onClick={() => setNumBoletos(numBoletos + 1)}
+                        className="w-10 h-10 rounded-lg border text-lg font-bold flex items-center justify-center hover:border-cyan-500 transition-all"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>+</button>
+                      <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                        × ${precioBoleto.toLocaleString()} = <strong style={{ color: 'var(--color-text)' }}>${montoTotal.toLocaleString()}</strong>
+                      </span>
+                    </div>
+                  </div>
+                  <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
                     <select value={nacionId} onChange={e => setNacionId(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
@@ -305,7 +334,9 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                 <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
                 <div className="space-y-4">
                   <div className="flex justify-between items-center py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Total</span>
+                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                      Total ({numBoletos} boleto{numBoletos > 1 ? 's' : ''} × ${precioBoleto.toLocaleString()})
+                    </span>
                     <span className="text-xl font-bold">${montoTotal.toLocaleString()}</span>
                   </div>
                   <div>

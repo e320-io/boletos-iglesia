@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { ACTION_LABELS, logActivity } from '@/lib/activity';
+import { useAuth } from '@/lib/auth';
 
 interface Usuario {
   id: string;
@@ -14,8 +16,15 @@ interface Usuario {
 }
 
 export default function AdminPanel({ onBack }: { onBack: () => void }) {
+  const { user } = useAuth();
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Activity log
+  const [showLog, setShowLog] = useState(false);
+  const [logEntries, setLogEntries] = useState<any[]>([]);
+  const [logFilter, setLogFilter] = useState('todos');
+  const [logLoading, setLogLoading] = useState(false);
 
   // New user form
   const [showForm, setShowForm] = useState(false);
@@ -36,6 +45,19 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
+
+  const fetchLog = useCallback(async () => {
+    setLogLoading(true);
+    let query = supabase.from('activity_log').select('*').order('created_at', { ascending: false }).limit(200);
+    if (logFilter !== 'todos') {
+      query = query.eq('usuario_id', logFilter);
+    }
+    const { data } = await query;
+    if (data) setLogEntries(data);
+    setLogLoading(false);
+  }, [logFilter]);
+
+  useEffect(() => { if (showLog) fetchLog(); }, [showLog, fetchLog]);
 
   const handleCreate = async () => {
     if (!newUsername.trim() || !newPassword || !newNombre.trim()) {
@@ -59,6 +81,9 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
       if (error) throw error;
 
       setFormSuccess(`Usuario "${newUsername}" creado`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'usuario_creado', detail: `${newNombre.trim()} (${newUsername.toLowerCase().trim()}) — ${newRol}` });
+      }
       setNewUsername(''); setNewPassword(''); setNewNombre(''); setNewRol('registro');
       setTimeout(() => { setFormSuccess(''); setShowForm(false); }, 2000);
       fetchUsers();
@@ -110,15 +135,33 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
               ⚙️ Administrar Usuarios
             </h1>
           </div>
-          <button onClick={() => setShowForm(!showForm)}
-            className="px-4 py-2 rounded-lg text-sm font-bold text-white transition-all"
-            style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
-            + Crear Usuario
-          </button>
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--color-bg)' }}>
+              <button onClick={() => setShowLog(false)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${!showLog ? 'text-white' : 'text-slate-400 hover:text-white'}`}
+                style={!showLog ? { background: 'var(--color-accent)' } : {}}>
+                👥 Usuarios
+              </button>
+              <button onClick={() => setShowLog(true)}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${showLog ? 'text-white' : 'text-slate-400 hover:text-white'}`}
+                style={showLog ? { background: 'var(--color-accent)' } : {}}>
+                📋 Actividad
+              </button>
+            </div>
+            {!showLog && (
+              <button onClick={() => setShowForm(!showForm)}
+                className="px-4 py-2 rounded-lg text-sm font-bold text-white transition-all"
+                style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
+                + Crear Usuario
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
       <main className="max-w-[900px] mx-auto p-6 space-y-6">
+        {!showLog ? (
+          <>
         {/* Create user form */}
         {showForm && (
           <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-accent)', boxShadow: '0 0 20px rgba(0,188,212,0.1)' }}>
@@ -269,6 +312,73 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
             </div>
           </div>
         </div>
+          </>
+        ) : (
+          <>
+        {/* Activity Log */}
+        <div className="flex items-center gap-4 mb-2">
+          <h3 className="font-bold text-lg" style={{ fontFamily: 'var(--font-display)' }}>Historial de Actividad</h3>
+          <select value={logFilter} onChange={e => setLogFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-lg text-sm border"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <option value="todos">Todos los usuarios</option>
+            {usuarios.map(u => (
+              <option key={u.id} value={u.id}>{u.nombre} ({u.username})</option>
+            ))}
+          </select>
+          <button onClick={fetchLog} className="px-3 py-1.5 rounded-lg text-xs border"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+            🔄 Actualizar
+          </button>
+        </div>
+
+        <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          {logLoading ? (
+            <div className="p-8 text-center" style={{ color: 'var(--color-text-muted)' }}>Cargando...</div>
+          ) : logEntries.length === 0 ? (
+            <div className="p-8 text-center" style={{ color: 'var(--color-text-muted)' }}>Sin actividad registrada</div>
+          ) : (
+            <div className="max-h-[600px] overflow-y-auto">
+              {logEntries.map(entry => {
+                const actionIcons: Record<string, string> = {
+                  registro_creado: '📝',
+                  registro_editado: '✏️',
+                  registro_eliminado: '🗑️',
+                  pago_registrado: '💰',
+                  pago_grupo_liquidado: '💰',
+                  asiento_asignado: '🪑',
+                  checkin_dia1: '✅',
+                  checkin_dia2: '🟠',
+                  usuario_creado: '👤',
+                  usuario_editado: '👤',
+                  login: '🔑',
+                };
+                return (
+                  <div key={entry.id} className="flex items-start gap-3 px-4 py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                    <span className="text-lg mt-0.5">{actionIcons[entry.accion] || '📋'}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">{entry.usuario_nombre}</span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: 'rgba(0,188,212,0.1)', color: 'var(--color-accent)' }}>
+                          {(ACTION_LABELS as any)[entry.accion] || entry.accion}
+                        </span>
+                      </div>
+                      {entry.detalle && (
+                        <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>{entry.detalle}</p>
+                      )}
+                    </div>
+                    <span className="text-[10px] flex-shrink-0 mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                      {new Date(entry.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}{' '}
+                      {new Date(entry.created_at).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Mexico_City' })}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+          </>
+        )}
       </main>
     </div>
   );

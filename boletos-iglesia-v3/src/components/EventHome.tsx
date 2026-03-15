@@ -28,9 +28,11 @@ interface Evento {
   tiene_asientos: boolean;
 }
 
-export default function EventHome({ evento, onBack }: { evento: Evento; onBack: () => void }) {
-  const [tab, setTab] = useState<Tab>('registros');
+export default function EventHome({ evento, onBack, userRole = 'registro' }: { evento: Evento; onBack: () => void; userRole?: string }) {
+  const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : 'registros');
   const theme = getTheme(evento.slug);
+  const canRegister = userRole === 'admin' || userRole === 'registro';
+  const canSeeDashboard = userRole === 'admin' || userRole === 'dueno';
 
   // Apply event theme
   useEffect(() => {
@@ -236,21 +238,27 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
           </div>
 
           <div className="flex gap-1 p-1 rounded-lg" style={{ background: 'var(--color-bg)' }}>
-            <button onClick={() => { setTab('nuevo'); setSelectedRegistro(null); }}
-              className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'nuevo' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-              style={tab === 'nuevo' ? { background: 'var(--color-accent)' } : {}}>
-              + Nuevo
-            </button>
-            <button onClick={() => { setTab('registros'); setSelectedRegistro(null); }}
-              className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'registros' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-              style={tab === 'registros' ? { background: 'var(--color-accent)' } : {}}>
-              Registros ({registros.length})
-            </button>
-            <button onClick={() => { setTab('dashboard'); setSelectedRegistro(null); }}
-              className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'dashboard' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
-              style={tab === 'dashboard' ? { background: 'var(--color-accent)' } : {}}>
-              📊 Dashboard
-            </button>
+            {canRegister && (
+              <button onClick={() => { setTab('nuevo'); setSelectedRegistro(null); }}
+                className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'nuevo' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                style={tab === 'nuevo' ? { background: 'var(--color-accent)' } : {}}>
+                + Nuevo
+              </button>
+            )}
+            {canRegister && (
+              <button onClick={() => { setTab('registros'); setSelectedRegistro(null); }}
+                className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'registros' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                style={tab === 'registros' ? { background: 'var(--color-accent)' } : {}}>
+                Registros ({registros.length})
+              </button>
+            )}
+            {canSeeDashboard && (
+              <button onClick={() => { setTab('dashboard'); setSelectedRegistro(null); }}
+                className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'dashboard' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                style={tab === 'dashboard' ? { background: 'var(--color-accent)' } : {}}>
+                📊 Dashboard
+              </button>
+            )}
           </div>
 
           <div className="flex items-center gap-5">

@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { logActivity } from '@/lib/activity';
+import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion } from '@/types';
 
 interface Props {
@@ -17,6 +19,7 @@ interface Props {
 }
 
 export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast }: Props) {
+  const { user } = useAuth();
   const [search, setSearch] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterNacion, setFilterNacion] = useState<string>('todos');
@@ -50,7 +53,13 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
       .update({ checked_in: !isCheckedIn, checked_in_at: !isCheckedIn ? new Date().toISOString() : null })
       .eq('id', registro.id);
     if (error) addToast?.('error', 'Error al actualizar check-in');
-    else { addToast?.('success', !isCheckedIn ? `✓ Check-in: ${registro.nombre}` : `Check-in removido: ${registro.nombre}`); onRefresh(); }
+    else {
+      addToast?.('success', !isCheckedIn ? `✓ Check-in: ${registro.nombre}` : `Check-in removido: ${registro.nombre}`);
+      if (user && !isCheckedIn) {
+        logActivity({ userId: user.id, userName: user.nombre, action: 'checkin_dia1', detail: registro.nombre, eventoId: eventoId, registroId: registro.id });
+      }
+      onRefresh();
+    }
   };
 
   const handleCheckIn2 = async (e: React.MouseEvent, registro: Registro) => {
@@ -61,7 +70,13 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
       .update({ checked_in_2: !isCheckedIn2, checked_in_2_at: !isCheckedIn2 ? new Date().toISOString() : null })
       .eq('id', registro.id);
     if (error) addToast?.('error', 'Error al actualizar check-in día 2');
-    else { addToast?.('success', !isCheckedIn2 ? `✓ Check-in Día 2: ${registro.nombre}` : `Check-in Día 2 removido: ${registro.nombre}`); onRefresh(); }
+    else {
+      addToast?.('success', !isCheckedIn2 ? `✓ Check-in Día 2: ${registro.nombre}` : `Check-in Día 2 removido: ${registro.nombre}`);
+      if (user && !isCheckedIn2) {
+        logActivity({ userId: user.id, userName: user.nombre, action: 'checkin_dia2', detail: registro.nombre, eventoId: eventoId, registroId: registro.id });
+      }
+      onRefresh();
+    }
   };
 
   const statusColors: Record<string, string> = {

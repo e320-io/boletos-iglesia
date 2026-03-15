@@ -29,7 +29,14 @@ export default function HomePage() {
     if (!user) return;
     async function load() {
       const { data } = await supabase.from('eventos').select('*').eq('activo', true).order('fecha');
-      if (data) setEventos(data);
+      if (data) {
+        setEventos(data);
+        // Auto-select event for evento-specific users
+        if (user.rol === 'evento' && user.evento_id) {
+          const assigned = data.find((e: any) => e.id === user.evento_id);
+          if (assigned) setSelectedEvento(assigned);
+        }
+      }
       setLoading(false);
     }
     load();
@@ -60,7 +67,9 @@ export default function HomePage() {
 
   // Inside an event
   if (selectedEvento) {
-    return <EventHome evento={selectedEvento} onBack={() => setSelectedEvento(null)} userRole={user.rol} />;
+    return <EventHome evento={selectedEvento}
+      onBack={user.rol === 'evento' ? () => logout() : () => setSelectedEvento(null)}
+      userRole={user.rol} />;
   }
 
   // Event selector

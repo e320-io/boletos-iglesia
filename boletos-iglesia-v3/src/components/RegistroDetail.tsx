@@ -354,29 +354,6 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         {/* Right column */}
         {!editing && (
           <div className="space-y-4">
-            {/* Seat map for assignment — interactive, not dropdown */}
-            {canAssignSeat && (
-              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: '#f59e0b', boxShadow: '0 0 15px rgba(245,158,11,0.1)' }}>
-                <h3 className="font-bold mb-2" style={{ fontFamily: 'var(--font-display)' }}>🪑 Asignar Asiento</h3>
-                <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>
-                  Boleto liquidado. Selecciona un asiento disponible en el mapa.
-                </p>
-                {selectedSeatForAssign.length > 0 && (
-                  <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
-                    ✓ Seleccionado: {selectedSeatForAssign.map(s => (
-                      <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
-                    ))}
-                  </div>
-                )}
-                <SeatMap asientos={asientos} selectedSeats={selectedSeatForAssign} onSeatClick={handleSeatClickForAssign} />
-                <button onClick={handleAssignSeat} disabled={loading || selectedSeatForAssign.length === 0}
-                  className="w-full mt-4 py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40"
-                  style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontFamily: 'var(--font-display)' }}>
-                  {loading ? 'Asignando...' : selectedSeatForAssign.length > 0 ? `Asignar ${selectedSeatForAssign.join(', ')}` : 'Selecciona un asiento arriba'}
-                </button>
-              </div>
-            )}
-
             {/* Abono section */}
             {saldo > 0 && (
               <div className="rounded-xl p-6 border h-fit sticky top-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -408,22 +385,15 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <button onClick={() => setMontoAbono(saldo.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Liquidar total</button>
                   </div>
 
-                  {/* Seat map appears when this abono will liquidate the ticket */}
+                  {/* Hint that map is below */}
                   {willLiquidate && (
-                    <div className="rounded-lg p-4 border" style={{ borderColor: '#f59e0b', background: 'rgba(245,158,11,0.05)' }}>
-                      <h4 className="font-bold text-sm mb-2" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
-                        🪑 Este pago liquida el boleto — selecciona asiento
-                      </h4>
+                    <div className="rounded-lg p-3 text-xs text-center" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                      🪑 Este pago liquida el boleto — selecciona asiento en el mapa de abajo
                       {selectedSeatForAssign.length > 0 && (
-                        <div className="rounded-lg p-2 mb-3 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
-                          ✓ {selectedSeatForAssign.map(s => (
-                            <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
-                          ))}
-                        </div>
+                        <span className="ml-2 inline-flex gap-1">{selectedSeatForAssign.map(s => (
+                          <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                        ))}</span>
                       )}
-                      <div className="max-h-[400px] overflow-auto">
-                        <SeatMap asientos={asientos} selectedSeats={selectedSeatForAssign} onSeatClick={handleSeatClickForAssign} />
-                      </div>
                     </div>
                   )}
 
@@ -445,6 +415,33 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
           </div>
         )}
       </div>
+
+      {/* Full-width seat map — appears when abono will liquidate OR when already liquidado without seat */}
+      {!editing && ((willLiquidate) || canAssignSeat) && (
+        <div className="mt-6 rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: '#f59e0b', boxShadow: '0 0 15px rgba(245,158,11,0.1)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-lg" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
+              🪑 {willLiquidate ? 'Este pago liquida el boleto — selecciona asiento' : 'Asignar Asiento'}
+            </h3>
+            {selectedSeatForAssign.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seleccionado:</span>
+                {selectedSeatForAssign.map(s => (
+                  <span key={s} className="px-3 py-1 rounded-lg text-sm font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                ))}
+                {canAssignSeat && (
+                  <button onClick={handleAssignSeat} disabled={loading}
+                    className="ml-2 px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                    {loading ? 'Asignando...' : 'Confirmar Asiento'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          <SeatMap asientos={asientos} selectedSeats={selectedSeatForAssign} onSeatClick={handleSeatClickForAssign} />
+        </div>
+      )}
     </div>
   );
 }

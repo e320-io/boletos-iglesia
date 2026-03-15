@@ -32,7 +32,7 @@ export default function HomePage() {
       if (data) {
         setEventos(data);
         // Auto-select event for evento-specific users
-        if (user && user.rol === 'evento' && user.evento_id) {
+        if (user && (user.rol === 'evento' || (user.rol === 'dueno' && user.evento_id)) && user.evento_id) {
           const assigned = data.find((e: any) => e.id === user.evento_id);
           if (assigned) setSelectedEvento(assigned);
         }
@@ -68,7 +68,7 @@ export default function HomePage() {
   // Inside an event
   if (selectedEvento) {
     return <EventHome evento={selectedEvento}
-      onBack={user.rol === 'evento' ? () => logout() : () => setSelectedEvento(null)}
+      onBack={(user.rol === 'evento' || (user.rol === 'dueno' && user.evento_id)) ? () => logout() : () => setSelectedEvento(null)}
       userRole={user.rol} />;
   }
 

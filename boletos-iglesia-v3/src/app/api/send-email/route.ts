@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.GMAIL_USER || 'registrornmx@gmail.com',
+    pass: process.env.GMAIL_APP_PASSWORD,
+  },
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -39,7 +45,6 @@ export async function POST(request: NextRequest) {
     };
 
     const saldo = Number(registro.monto_total) - Number(registro.monto_pagado);
-    const asientosStr = (registro.asientos || []).map((a: any) => a.id).sort().join(', ');
     const lastPago = registro.pagos?.sort((a: any, b: any) =>
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0];
@@ -53,7 +58,6 @@ export async function POST(request: NextRequest) {
 
     const eventName = process.env.NEXT_PUBLIC_EVENT_NAME || 'Evento Iglesia 2026';
 
-    // Build HTML email (styled like Image 3)
     const htmlEmail = `
 <!DOCTYPE html>
 <html>
@@ -64,7 +68,6 @@ export async function POST(request: NextRequest) {
 <body style="margin:0;padding:0;background:#f5f5f5;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
     
-    <!-- Header -->
     <div style="background:linear-gradient(135deg,#1e3a5f,#0a1628);padding:32px;text-align:left;">
       <h1 style="color:#ffffff;font-size:24px;margin:0 0 8px 0;font-weight:700;">
         Comprobante de Boleto
@@ -74,7 +77,6 @@ export async function POST(request: NextRequest) {
       </p>
     </div>
 
-    <!-- Body -->
     <div style="padding:32px;">
       <p style="font-size:18px;color:#333;margin:0 0 24px 0;">
         Hola <strong>${registro.nombre}</strong>,
@@ -84,9 +86,12 @@ export async function POST(request: NextRequest) {
         <tr>
           <td style="padding:14px 0;border-bottom:1px solid #eee;color:#666;font-size:14px;width:40%;">Asientos</td>
           <td style="padding:14px 0;border-bottom:1px solid #eee;font-size:14px;">
-            ${(registro.asientos || []).map((a: any) => 
-              `<span style="display:inline-block;background:#00bcd4;color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${a.id}</span>`
-            ).join('')}
+            ${(registro.asientos || []).length > 0 
+              ? (registro.asientos || []).map((a: any) => 
+                `<span style="display:inline-block;background:#00bcd4;color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${a.id}</span>`
+              ).join('')
+              : '<span style="color:#999;">General</span>'
+            }
           </td>
         </tr>
         <tr>
@@ -134,7 +139,6 @@ export async function POST(request: NextRequest) {
       </table>
     </div>
 
-    <!-- Footer -->
     <div style="background:#f8f9fa;padding:16px 32px;text-align:center;border-top:1px solid #eee;">
       <p style="color:#999;font-size:12px;margin:0;">
         Este correo fue generado automáticamente. Por favor no respondas.
@@ -144,19 +148,17 @@ export async function POST(request: NextRequest) {
 </body>
 </html>`;
 
-    // Send via Resend
-    const { data: emailData, error: emailError } = await resend.emails.send({
-      from: `${eventName} <onboarding@resend.dev>`,
-      to: [registro.correo],
+    // Send via Gmail SMTP
+    const info = await transporter.sendMail({
+      from: `"${eventName}" <${process.env.GMAIL_USER || 'registrornmx@gmail.com'}>`,
+      to: registro.correo,
       subject: `Comprobante de boleto - ${registro.nombre}`,
       html: htmlEmail,
     });
 
-    if (emailError) throw emailError;
-
-    return NextResponse.json({ status: 'ok', emailId: emailData?.id });
+    return NextResponse.json({ status: 'ok', messageId: info.messageId });
   } catch (error: any) {
     console.error('Email error:', error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ error: error.message || 'Error desconocido al enviar email' }, { status: 500 });
   }
 }

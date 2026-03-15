@@ -1,9 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { Nacion, Registro, Asiento } from '@/types';
+import { useAuth } from '@/lib/auth';
+import LoginScreen from '@/components/LoginScreen';
 import EventHome from '@/components/EventHome';
+import AdminPanel from '@/components/AdminPanel';
 
 interface Evento {
   id: string;
@@ -17,20 +19,24 @@ interface Evento {
 }
 
 export default function HomePage() {
+  const { user, loading: authLoading, logout } = useAuth();
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
+  const [showAdmin, setShowAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!user) return;
     async function load() {
       const { data } = await supabase.from('eventos').select('*').eq('activo', true).order('fecha');
       if (data) setEventos(data);
       setLoading(false);
     }
     load();
-  }, []);
+  }, [user]);
 
-  if (loading) {
+  // Show loading while checking auth
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
         <div className="text-center">
@@ -42,10 +48,22 @@ export default function HomePage() {
     );
   }
 
-  if (selectedEvento) {
-    return <EventHome evento={selectedEvento} onBack={() => setSelectedEvento(null)} />;
+  // Not logged in — show login
+  if (!user) {
+    return <LoginScreen />;
   }
 
+  // Admin panel
+  if (showAdmin && user.rol === 'admin') {
+    return <AdminPanel onBack={() => setShowAdmin(false)} />;
+  }
+
+  // Inside an event
+  if (selectedEvento) {
+    return <EventHome evento={selectedEvento} onBack={() => setSelectedEvento(null)} userRole={user.rol} />;
+  }
+
+  // Event selector
   return (
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--color-bg)' }}>
       <div className="w-full max-w-2xl">
@@ -57,7 +75,9 @@ export default function HomePage() {
           <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--font-display)' }}>
             Sistema de Registro
           </h1>
-          <p style={{ color: 'var(--color-text-muted)' }}>Selecciona el evento al que deseas acceder</p>
+          <p style={{ color: 'var(--color-text-muted)' }}>
+            Hola, <strong>{user.nombre}</strong> — {user.rol === 'admin' ? 'Administrador' : user.rol === 'dueno' ? 'Dueño del evento' : 'Registro'}
+          </p>
         </div>
 
         <div className="grid gap-4">
@@ -66,7 +86,6 @@ export default function HomePage() {
             const hoy = new Date();
             const diff = Math.ceil((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
             const esHoy = diff === 0;
-            const isPast = diff < 0;
 
             return (
               <button
@@ -87,23 +106,14 @@ export default function HomePage() {
                       </h2>
                       {esHoy && (
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold text-white animate-pulse"
-                          style={{ background: 'var(--color-accent)' }}>
-                          HOY
-                        </span>
-                      )}
-                      {e.tiene_asientos && (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-600 text-slate-400">
-                          Con asientos
-                        </span>
+                          style={{ background: 'var(--color-accent)' }}>HOY</span>
                       )}
                     </div>
                     <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                       {e.descripcion} · {fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
                     </p>
-                    {!isPast && !esHoy && (
-                      <p className="text-xs mt-1" style={{ color: 'var(--color-accent)' }}>
-                        Faltan {diff} días
-                      </p>
+                    {diff > 0 && (
+                      <p className="text-xs mt-1" style={{ color: 'var(--color-accent)' }}>Faltan {diff} días</p>
                     )}
                   </div>
                   <div className="text-2xl opacity-30 group-hover:opacity-70 transition-opacity">→</div>
@@ -111,6 +121,23 @@ export default function HomePage() {
               </button>
             );
           })}
+        </div>
+
+        {/* Bottom bar */}
+        <div className="flex items-center justify-between mt-8 pt-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
+          {user.rol === 'admin' && (
+            <button onClick={() => setShowAdmin(true)}
+              className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+              ⚙️ Administrar Usuarios
+            </button>
+          )}
+          <div className="flex-1" />
+          <button onClick={logout}
+            className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-red-500 hover:text-red-400"
+            style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+            Cerrar sesión
+          </button>
         </div>
       </div>
     </div>

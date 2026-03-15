@@ -33,8 +33,11 @@ interface Evento {
 export default function EventHome({ evento, onBack, userRole = 'registro' }: { evento: Evento; onBack: () => void; userRole?: string }) {
   const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : 'registros');
   const theme = getTheme(evento.slug);
+  const isFreeEvent = evento.precio_default === 0;
   const canRegister = userRole === 'admin' || userRole === 'registro' || userRole === 'evento';
   const canSeeDashboard = userRole === 'admin' || userRole === 'dueno';
+  const canSeeRegistros = canRegister && userRole !== 'evento'; // evento role only sees new registration
+  const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : (userRole === 'evento' ? 'nuevo' : 'registros'));
   const { user } = useAuth();
 
   // Apply event theme
@@ -67,7 +70,6 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
   // Equipos for events like HollyFest
   const [equipos, setEquipos] = useState<any[]>([]);
-  const isFreeEvent = evento.precio_default === 0;
 
   const addToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = Date.now();
@@ -291,7 +293,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                 + Nuevo
               </button>
             )}
-            {canRegister && (
+            {canSeeRegistros && (
               <button onClick={() => { setTab('registros'); setSelectedRegistro(null); }}
                 className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'registros' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 style={tab === 'registros' ? { background: 'var(--color-accent)' } : {}}>
@@ -308,19 +310,20 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           </div>
 
           <div className="flex items-center gap-5">
-            {userRole !== 'registro' && (
+            {userRole !== 'registro' && userRole !== 'evento' && (
               <button onClick={() => setPrivacyMode(!privacyMode)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-all"
                 style={{ borderColor: privacyMode ? 'var(--color-accent)' : 'var(--color-border)', background: privacyMode ? 'rgba(0,188,212,0.1)' : 'transparent', color: privacyMode ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
                 {privacyMode ? '👁️‍🗨️ Oculto' : '👁️ Visible'}
               </button>
             )}
+            {userRole !== 'evento' && (
             <div className="flex gap-6 text-sm">
               <div className="text-center">
                 <div className="font-bold text-lg" style={{ color: 'var(--color-accent)' }}>{registros.length}</div>
                 <div style={{ color: 'var(--color-text-muted)' }}>Registros</div>
               </div>
-              {userRole !== 'registro' && (
+              {!isFreeEvent && userRole !== 'registro' && (
                 <div className="text-center">
                   <BlurValue className="font-bold text-lg text-amber-400 block">
                     ${registros.reduce((s, r) => s + Number(r.monto_pagado), 0).toLocaleString()}
@@ -329,6 +332,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                 </div>
               )}
             </div>
+            )}
           </div>
         </div>
       </header>
@@ -562,7 +566,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
         {tab === 'registros' && !selectedRegistro && (
           <RegistrosList registros={registros} naciones={naciones} onSelect={setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} />
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} />
         )}
 
         {tab === 'registros' && selectedRegistro && (
@@ -572,7 +576,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
         )}
 
         {tab === 'dashboard' && (
-          <Dashboard registros={registros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} />
+          <Dashboard registros={registros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} />
         )}
       </main>
 

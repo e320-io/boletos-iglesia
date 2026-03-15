@@ -11,12 +11,13 @@ interface Props {
   naciones: Nacion[];
   asientos?: Asiento[];
   tieneAsientos?: boolean;
+  allRegistros?: Registro[];
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], onBack, onRefresh, addToast }: Props) {
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [referencia, setReferencia] = useState('');
@@ -35,6 +36,66 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
 
   // Seat assignment
   const [selectedSeatForAssign, setSelectedSeatForAssign] = useState<string[]>([]);
+
+  // Group (grupo) detection — find related boletos by notas field
+  const grupoTag = (registro.notas || '').match(/^Grupo de .+ \(\d+ boletos\)$/)?.[0];
+  const grupoBoletos = grupoTag
+    ? allRegistros.filter(r => (r as any).notas === grupoTag)
+    : [];
+  const isGrupo = grupoBoletos.length > 1;
+  const grupoSinLiquidar = grupoBoletos.filter(r => r.status !== 'liquidado');
+  const grupoSaldoTotal = grupoBoletos.reduce((s, r) => s + (Number(r.monto_total) - Number(r.monto_pagado)), 0);
+  const grupoSinAsiento = grupoBoletos.filter(r => !(r.asientos || []).length && tieneAsientos);
+
+  // Group liquidation
+  const [showGroupLiquidation, setShowGroupLiquidation] = useState(false);
+  const [groupMontoAbono, setGroupMontoAbono] = useState('');
+  const [groupMetodoPago, setGroupMetodoPago] = useState<MetodoPago>('efectivo');
+  const [groupSeats, setGroupSeats] = useState<string[]>([]);
+
+  const groupAbonoAmount = parseFloat(groupMontoAbono) || 0;
+  const groupWillLiquidate = groupAbonoAmount >= grupoSaldoTotal && grupoSaldoTotal > 0;
+
+  const handleGroupSeatClick = (seatId: string) => {
+    setGroupSeats(prev => {
+      if (prev.includes(seatId)) return prev.filter(s => s !== seatId);
+      if (prev.length >= grupoSinAsiento.length) return [...prev.slice(1), seatId];
+      return [...prev, seatId];
+    });
+  };
+
+  const handleGroupLiquidation = async () => {
+    if (groupAbonoAmount < grupoSaldoTotal) { addToast('error', `Necesitas $${grupoSaldoTotal.toLocaleString()} para liquidar todos los boletos`); return; }
+    if (tieneAsientos && groupSeats.length < grupoSinAsiento.length) {
+      addToast('error', `Selecciona ${grupoSinAsiento.length} asiento${grupoSinAsiento.length > 1 ? 's' : ''} en el mapa (tienes ${groupSeats.length})`);
+      return;
+    }
+
+    setLoading(true);
+    try {
+      let seatIdx = 0;
+      for (const boleto of grupoBoletos) {
+        const saldoBoleto = Number(boleto.monto_total) - Number(boleto.monto_pagado);
+        if (saldoBoleto <= 0) continue;
+
+        // Pay remaining balance
+        await supabase.from('pagos').insert({ registro_id: boleto.id, monto: saldoBoleto, metodo_pago: groupMetodoPago });
+        await supabase.from('registros').update({ monto_pagado: Number(boleto.monto_total), status: 'liquidado' }).eq('id', boleto.id);
+
+        // Assign seat if needed
+        if (tieneAsientos && !(boleto.asientos || []).length && groupSeats[seatIdx]) {
+          await supabase.from('asientos').update({ estado: 'ocupado', registro_id: boleto.id }).eq('id', groupSeats[seatIdx]);
+          seatIdx++;
+        }
+      }
+
+      addToast('success', `¡${grupoBoletos.length} boletos liquidados! ${groupSeats.length > 0 ? 'Asientos: ' + groupSeats.join(', ') : ''}`);
+      setShowGroupLiquidation(false);
+      onRefresh(); onBack();
+    } catch (error: any) {
+      addToast('error', `Error: ${error.message}`);
+    } finally { setLoading(false); }
+  };
 
   const saldo = Number(registro.monto_total) - Number(registro.monto_pagado);
   const nacion = naciones.find(n => n.id === registro.nacion_id);
@@ -297,6 +358,91 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
             )}
           </div>
 
+          {/* Grupo de boletos */}
+          {!editing && isGrupo && (
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: grupoSinLiquidar.length > 0 ? '#f59e0b' : '#10b981', boxShadow: grupoSinLiquidar.length > 0 ? '0 0 15px rgba(245,158,11,0.1)' : 'none' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                  🎫 Grupo de {grupoBoletos.length} boletos
+                </h3>
+                {grupoSinLiquidar.length > 0 && grupoSaldoTotal > 0 && (
+                  <button onClick={() => { setShowGroupLiquidation(!showGroupLiquidation); setGroupMontoAbono(grupoSaldoTotal.toString()); }}
+                    className="px-4 py-2 rounded-lg text-sm font-bold text-white transition-all"
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                    Liquidar todos (${grupoSaldoTotal.toLocaleString()})
+                  </button>
+                )}
+              </div>
+              <div className="space-y-2">
+                {grupoBoletos.map((b, i) => {
+                  const bSaldo = Number(b.monto_total) - Number(b.monto_pagado);
+                  const bAsientos = (b.asientos || []) as any[];
+                  return (
+                    <div key={b.id} className={`flex items-center justify-between py-2 px-3 rounded-lg text-sm ${b.id === registro.id ? 'ring-1 ring-cyan-500/50' : ''}`}
+                      style={{ background: 'var(--color-bg)' }}>
+                      <div className="flex items-center gap-3">
+                        <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white"
+                          style={{ background: b.status === 'liquidado' ? '#10b981' : b.status === 'abono' ? '#f59e0b' : '#ef4444' }}>{i + 1}</span>
+                        <span className="font-medium">{b.nombre}</span>
+                        {bAsientos.length > 0 && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold text-white" style={{ background: 'var(--color-accent)' }}>{bAsientos[0].id}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>${Number(b.monto_pagado).toLocaleString()} / ${Number(b.monto_total).toLocaleString()}</span>
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${b.status === 'liquidado' ? 'bg-emerald-500/20 text-emerald-400' : b.status === 'abono' ? 'bg-amber-500/20 text-amber-400' : 'bg-red-500/20 text-red-400'}`}>
+                          {b.status === 'liquidado' ? '✓' : bSaldo > 0 ? `$${bSaldo}` : '—'}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Group liquidation form */}
+              {showGroupLiquidation && (
+                <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: 'var(--color-border)' }}>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {METODOS_PAGO.map(m => (
+                        <button key={m.value} onClick={() => setGroupMetodoPago(m.value as MetodoPago)}
+                          className={`px-2 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1 ${groupMetodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                          style={groupMetodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                          <span>{m.icon}</span><span>{m.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto para liquidar {grupoSinLiquidar.length} boletos</label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                      <input type="number" value={groupMontoAbono} onChange={e => setGroupMontoAbono(e.target.value)}
+                        className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                  </div>
+                  {groupWillLiquidate && tieneAsientos && grupoSinAsiento.length > 0 && (
+                    <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                      🪑 Selecciona {grupoSinAsiento.length} asiento{grupoSinAsiento.length > 1 ? 's' : ''} en el mapa de abajo
+                      {groupSeats.length > 0 && (
+                        <span className="ml-2">{groupSeats.length}/{grupoSinAsiento.length}: {groupSeats.map(s => (
+                          <span key={s} className="ml-1 px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                        ))}</span>
+                      )}
+                    </div>
+                  )}
+                  <button onClick={handleGroupLiquidation} disabled={loading || groupAbonoAmount < grupoSaldoTotal}
+                    className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40"
+                    style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)', fontFamily: 'var(--font-display)' }}>
+                    {loading ? 'Procesando...' : `Liquidar ${grupoSinLiquidar.length} boletos — $${grupoSaldoTotal.toLocaleString()}`}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Payment summary */}
           {!editing && (
             <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -416,30 +562,39 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         )}
       </div>
 
-      {/* Full-width seat map — appears when abono will liquidate OR when already liquidado without seat */}
-      {!editing && ((willLiquidate) || canAssignSeat) && (
+      {/* Full-width seat map — appears when liquidating individual, group, or already liquidado without seat */}
+      {!editing && ((willLiquidate) || canAssignSeat || (showGroupLiquidation && groupWillLiquidate && grupoSinAsiento.length > 0)) && (
         <div className="mt-6 rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: '#f59e0b', boxShadow: '0 0 15px rgba(245,158,11,0.1)' }}>
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-bold text-lg" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
-              🪑 {willLiquidate ? 'Este pago liquida el boleto — selecciona asiento' : 'Asignar Asiento'}
+              🪑 {showGroupLiquidation
+                ? `Selecciona ${grupoSinAsiento.length} asiento${grupoSinAsiento.length > 1 ? 's' : ''} para el grupo`
+                : willLiquidate
+                  ? 'Este pago liquida el boleto — selecciona asiento'
+                  : 'Asignar Asiento'}
             </h3>
-            {selectedSeatForAssign.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seleccionado:</span>
-                {selectedSeatForAssign.map(s => (
-                  <span key={s} className="px-3 py-1 rounded-lg text-sm font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
-                ))}
-                {canAssignSeat && (
-                  <button onClick={handleAssignSeat} disabled={loading}
-                    className="ml-2 px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
-                    style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
-                    {loading ? 'Asignando...' : 'Confirmar Asiento'}
-                  </button>
-                )}
-              </div>
-            )}
+            {(() => {
+              const seats = showGroupLiquidation ? groupSeats : selectedSeatForAssign;
+              return seats.length > 0 ? (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seleccionado:</span>
+                  {seats.map(s => (
+                    <span key={s} className="px-3 py-1 rounded-lg text-sm font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                  ))}
+                  {canAssignSeat && !showGroupLiquidation && (
+                    <button onClick={handleAssignSeat} disabled={loading}
+                      className="ml-2 px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
+                      style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                      {loading ? 'Asignando...' : 'Confirmar Asiento'}
+                    </button>
+                  )}
+                </div>
+              ) : null;
+            })()}
           </div>
-          <SeatMap asientos={asientos} selectedSeats={selectedSeatForAssign} onSeatClick={handleSeatClickForAssign} />
+          <SeatMap asientos={asientos}
+            selectedSeats={showGroupLiquidation ? groupSeats : selectedSeatForAssign}
+            onSeatClick={showGroupLiquidation ? handleGroupSeatClick : handleSeatClickForAssign} />
         </div>
       )}
     </div>

@@ -89,20 +89,20 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Light theme seats (Legacy Women) */
 .theme-light .seat-disponible {
-  background: rgba(107, 143, 94, 0.12);
-  color: #4a7340;
-  border-color: rgba(107, 143, 94, 0.25);
+  background: #ffffff;
+  color: #6b4c3b;
+  border-color: #d4c4b0;
 }
 .theme-light .seat-disponible:hover {
-  background: rgba(107, 143, 94, 0.25);
-  border-color: #6b8f5e;
+  background: #f0e6d8;
+  border-color: #6b4c3b;
   transform: scale(1.1);
-  box-shadow: 0 0 8px rgba(107, 143, 94, 0.2);
+  box-shadow: 0 0 8px rgba(107, 76, 59, 0.2);
 }
 .theme-light .seat-ocupado {
-  background: rgba(107, 76, 59, 0.15);
-  color: #8c6b5a;
-  border-color: rgba(107, 76, 59, 0.25);
+  background: #00bcd4;
+  color: #ffffff;
+  border-color: #0097a7;
   cursor: default;
 }
 .theme-light .seat-selected {

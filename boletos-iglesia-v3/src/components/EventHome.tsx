@@ -305,6 +305,7 @@ export default function EventHome({ evento, onBack }: { evento: Evento; onBack: 
                 </button>
               </div>
             </div>
+            </div>
           </div>
         )}
 

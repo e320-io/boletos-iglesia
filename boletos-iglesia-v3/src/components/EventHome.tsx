@@ -392,7 +392,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </div>
                     </div>
                   )}
-                  {!isFreeEvent && (
+                  {!isFreeEvent && (<>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
                     <div className="flex items-center gap-3">
@@ -445,7 +445,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </div>
                     </div>
                   )}
-                  )}
+                  </>)}
                   {/* Equipo selector (for events with equipos like HollyFest) */}
                   {hasEquipos && (
                     <div>

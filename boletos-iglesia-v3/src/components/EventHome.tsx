@@ -274,22 +274,26 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           </div>
 
           <div className="flex items-center gap-5">
-            <button onClick={() => setPrivacyMode(!privacyMode)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-all"
-              style={{ borderColor: privacyMode ? 'var(--color-accent)' : 'var(--color-border)', background: privacyMode ? 'rgba(0,188,212,0.1)' : 'transparent', color: privacyMode ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
-              {privacyMode ? '👁️‍🗨️ Oculto' : '👁️ Visible'}
-            </button>
+            {userRole !== 'registro' && (
+              <button onClick={() => setPrivacyMode(!privacyMode)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-all"
+                style={{ borderColor: privacyMode ? 'var(--color-accent)' : 'var(--color-border)', background: privacyMode ? 'rgba(0,188,212,0.1)' : 'transparent', color: privacyMode ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                {privacyMode ? '👁️‍🗨️ Oculto' : '👁️ Visible'}
+              </button>
+            )}
             <div className="flex gap-6 text-sm">
               <div className="text-center">
                 <div className="font-bold text-lg" style={{ color: 'var(--color-accent)' }}>{registros.length}</div>
                 <div style={{ color: 'var(--color-text-muted)' }}>Registros</div>
               </div>
-              <div className="text-center">
-                <BlurValue className="font-bold text-lg text-amber-400 block">
-                  ${registros.reduce((s, r) => s + Number(r.monto_pagado), 0).toLocaleString()}
-                </BlurValue>
-                <div style={{ color: 'var(--color-text-muted)' }}>Recaudado</div>
-              </div>
+              {userRole !== 'registro' && (
+                <div className="text-center">
+                  <BlurValue className="font-bold text-lg text-amber-400 block">
+                    ${registros.reduce((s, r) => s + Number(r.monto_pagado), 0).toLocaleString()}
+                  </BlurValue>
+                  <div style={{ color: 'var(--color-text-muted)' }}>Recaudado</div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -479,7 +483,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
         {tab === 'registros' && !selectedRegistro && (
           <RegistrosList registros={registros} naciones={naciones} onSelect={setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} />
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} />
         )}
 
         {tab === 'registros' && selectedRegistro && (

@@ -25,20 +25,25 @@ export async function POST(request: NextRequest) {
 
     const user = data[0];
 
+    // Fetch evento_id if user has one assigned
+    const { data: userData } = await supabase.from('usuarios').select('evento_id').eq('id', user.id).single();
+    const evento_id = userData?.evento_id || null;
+
     // Update last login
     await supabase.from('usuarios').update({ last_login: new Date().toISOString() }).eq('id', user.id);
 
-    // Create a simple session token (in production, use JWT)
+    // Create a simple session token
     const sessionToken = Buffer.from(JSON.stringify({
       id: user.id,
       username: user.username,
       nombre: user.nombre,
       rol: user.rol,
-      exp: Date.now() + (24 * 60 * 60 * 1000), // 24h
+      evento_id,
+      exp: Date.now() + (24 * 60 * 60 * 1000),
     })).toString('base64');
 
     const response = NextResponse.json({
-      user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol },
+      user: { id: user.id, username: user.username, nombre: user.nombre, rol: user.rol, evento_id },
     });
 
     // Set session cookie

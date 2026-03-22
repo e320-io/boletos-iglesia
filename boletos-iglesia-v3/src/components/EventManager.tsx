@@ -127,6 +127,36 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
         const { data, error } = await supabase.from('eventos').insert(eventoData).select().single();
         if (error) throw error;
         eventoId = data.id;
+
+        // Generate seats for new events with asientos
+        if (tieneAsientos) {
+          const seats: any[] = [];
+          const sections = [
+            { rows: ['A','B','C','D'], cols: Array.from({length:10},(_,i)=>i+1), seccion: 'izquierda' },
+            { rows: ['A','B','C','D'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
+            { rows: ['E','F','G','H','I','J','K','L','M','N'], cols: Array.from({length:10},(_,i)=>i+1), seccion: 'izquierda' },
+            { rows: ['E','F','G','H','I','J','K','L','M','N'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
+            { rows: ['O','P','Q','R','S'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
+          ];
+          for (const sec of sections) {
+            for (const row of sec.rows) {
+              for (const col of sec.cols) {
+                seats.push({
+                  id: `${row}${col}`,
+                  fila: row,
+                  columna: col,
+                  seccion: sec.seccion,
+                  estado: 'disponible',
+                  evento_id: eventoId,
+                });
+              }
+            }
+          }
+          // Insert in batches
+          for (let i = 0; i < seats.length; i += 100) {
+            await supabase.from('asientos').insert(seats.slice(i, i + 100));
+          }
+        }
       }
 
       // Save fases de precio

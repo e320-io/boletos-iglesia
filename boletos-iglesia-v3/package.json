@@ -16,9 +16,8 @@
     "nodemailer": "^6.9.16",
     "lucide-react": "^0.383.0",
     "jspdf": "^2.5.2",
-    "mercadopago": "^2.0.0",
-    "jspdf-autotable": "^3.8.4"
-    npm install mercadopago
+    "jspdf-autotable": "^3.8.4",
+    "mercadopago": "^2.0.0"
   },
   "devDependencies": {
     "@types/node": "^20",

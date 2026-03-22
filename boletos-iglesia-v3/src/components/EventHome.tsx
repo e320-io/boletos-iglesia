@@ -469,7 +469,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                         {isFreeEvent ? 'Equipo *' : 'Escuadrón *'}
                       </label>
                       {(() => {
-                        const generos = [...new Set(equipos.map(e => e.genero).filter(Boolean))];
+                        const generos = Array.from(new Set(equipos.map(e => e.genero).filter(Boolean)));
                         const hasGeneros = generos.length > 0;
                         return (
                           <div className="space-y-3">

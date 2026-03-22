@@ -11,6 +11,7 @@ export interface Registro {
   telefono: string | null;
   correo: string | null;
   whatsapp: string | null;
+  edad: number | null;
   nacion_id: string | null;
   equipo_id: string | null;
   status: 'pendiente' | 'abono' | 'liquidado';

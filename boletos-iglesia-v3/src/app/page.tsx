@@ -6,6 +6,7 @@ import { useAuth } from '@/lib/auth';
 import LoginScreen from '@/components/LoginScreen';
 import EventHome from '@/components/EventHome';
 import AdminPanel from '@/components/AdminPanel';
+import EventManager from '@/components/EventManager';
 
 interface Evento {
   id: string;
@@ -23,6 +24,7 @@ export default function HomePage() {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [showEventManager, setShowEventManager] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -63,6 +65,11 @@ export default function HomePage() {
   // Admin panel
   if (showAdmin && user.rol === 'admin') {
     return <AdminPanel onBack={() => setShowAdmin(false)} />;
+  }
+
+  // Event manager
+  if (showEventManager && user.rol === 'admin') {
+    return <EventManager onBack={() => { setShowEventManager(false); /* Reload events */ setLoading(true); supabase.from('eventos').select('*').eq('activo', true).order('fecha').then(({ data }) => { if (data) setEventos(data); setLoading(false); }); }} />;
   }
 
   // Inside an event
@@ -135,11 +142,18 @@ export default function HomePage() {
         {/* Bottom bar */}
         <div className="flex items-center justify-between mt-8 pt-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
           {user.rol === 'admin' && (
-            <button onClick={() => setShowAdmin(true)}
-              className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-              ⚙️ Administrar Usuarios
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setShowAdmin(true)}
+                className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                ⚙️ Usuarios
+              </button>
+              <button onClick={() => setShowEventManager(true)}
+                className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                🎫 Eventos
+              </button>
+            </div>
           )}
           <div className="flex-1" />
           <button onClick={logout}

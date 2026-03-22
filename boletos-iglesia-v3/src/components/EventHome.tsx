@@ -285,6 +285,15 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
     }
   };
 
+  const handleOccupiedSeatClick = (seat: Asiento) => {
+    if (!seat.registro_id) return;
+    const reg = registros.find(r => r.id === seat.registro_id);
+    if (reg) {
+      setSelectedRegistro(reg);
+      setTab('registros');
+    }
+  };
+
   const BlurValue = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <span className={className} style={privacyMode ? { filter: 'blur(8px)', userSelect: 'none' } : {}}>{children}</span>
   );
@@ -391,7 +400,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                   </div>
                 )}
                 <SeatMap asientos={asientos} selectedSeats={willBeLiquidado ? selectedSeats : []}
-                  onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} readOnly={!willBeLiquidado} />
+                  onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} onOccupiedClick={handleOccupiedSeatClick} readOnly={!willBeLiquidado} />
               </div>
             )}
 

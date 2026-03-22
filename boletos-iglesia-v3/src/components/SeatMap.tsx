@@ -28,7 +28,8 @@ function SeatSection({
   readOnly?: boolean;
   highlightSeats?: string[];
 }) {
-  const asientoMap = new Map(asientos.map(a => [a.id, a]));
+  // Use fila+columna as map key so it works with both text IDs ("A1") and UUID IDs
+  const asientoMap = new Map(asientos.map(a => [`${a.fila}${a.columna}`, a]));
 
   return (
     <div>
@@ -47,12 +48,12 @@ function SeatSection({
             {row}
           </div>
           {cols.map(col => {
-            const seatId = `${row}${col}`;
-            const seat = asientoMap.get(seatId);
+            const seatCode = `${row}${col}`;
+            const seat = asientoMap.get(seatCode);
             if (!seat) return <div key={col} className="w-[36px] h-[30px]" />;
 
-            const isSelected = selectedSeats.includes(seatId);
-            const isHighlighted = highlightSeats?.includes(seatId);
+            const isSelected = selectedSeats.includes(seat.id);
+            const isHighlighted = highlightSeats?.includes(seat.id);
             const canClick = !readOnly && seat.estado === 'disponible';
 
             let className = 'seat';
@@ -69,13 +70,13 @@ function SeatSection({
                 key={col}
                 className={className}
                 onClick={() => {
-                  if (isSelected) onSeatClick(seatId);
-                  else if (canClick) onSeatClick(seatId);
+                  if (isSelected) onSeatClick(seat.id);
+                  else if (canClick) onSeatClick(seat.id);
                 }}
                 disabled={!canClick && !isSelected}
-                title={`${seatId} — ${isSelected ? 'Seleccionado' : seat.estado}`}
+                title={`${seatCode} — ${isSelected ? 'Seleccionado' : seat.estado}`}
               >
-                {seatId}
+                {seatCode}
               </button>
             );
           })}

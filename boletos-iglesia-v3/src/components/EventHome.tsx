@@ -66,6 +66,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
+  const [metodosPorBoleto, setMetodosPorBoleto] = useState<MetodoPago[]>([]);
   const [precioBoleto, setPrecioBoleto] = useState(evento.precio_default);
 
   // Equipos for events like HollyFest
@@ -112,7 +113,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
   const resetForm = () => {
     setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
-    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
+    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setTipo('Encuentrista');
   };
 
   // Computed: total based on number of boletos
@@ -218,9 +219,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           if (seatError) throw seatError;
         }
 
-        // Record individual payment
+        // Record individual payment with per-boleto method if set
         if (pagoBoleto > 0) {
-          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoBoleto, metodo_pago: metodoPago });
+          const boletoMetodo = (numBoletos > 1 && metodosPorBoleto[i]) ? metodosPorBoleto[i] : metodoPago;
+          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoBoleto, metodo_pago: boletoMetodo });
         }
       }
 
@@ -559,15 +561,46 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {METODOS_PAGO.map(m => (
-                        <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                          className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          <span>{m.icon}</span><span>{m.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    {numBoletos > 1 && willBeLiquidado ? (
+                      /* Per-boleto payment method when liquidating multiple */
+                      <div className="space-y-2">
+                        {Array.from({ length: numBoletos }, (_, i) => {
+                          const boletoName = i === 0 ? (nombre || 'Boleto 1') : (guestNames[i - 1]?.trim() || `${nombre || 'Titular'} - Invitada ${i}`);
+                          const metodo = metodosPorBoleto[i] || 'efectivo';
+                          return (
+                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--color-bg)' }}>
+                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: 'var(--color-accent)' }}>{i + 1}</span>
+                              <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text-muted)' }}>{boletoName}</span>
+                              <div className="flex gap-1">
+                                {METODOS_PAGO.map(m => (
+                                  <button key={m.value} onClick={() => {
+                                    const updated = [...metodosPorBoleto];
+                                    while (updated.length <= i) updated.push('efectivo');
+                                    updated[i] = m.value as MetodoPago;
+                                    setMetodosPorBoleto(updated);
+                                  }}
+                                    className={`px-2 py-1 rounded text-[10px] border transition-all ${metodo === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-500'}`}
+                                    style={metodo === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                                    {m.icon}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      /* Single payment method */
+                      <div className="grid grid-cols-2 gap-2">
+                        {METODOS_PAGO.map(m => (
+                          <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
+                            className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            <span>{m.icon}</span><span>{m.label}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>

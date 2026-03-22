@@ -54,6 +54,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
   // Form state
   const [nombre, setNombre] = useState('');
+  const [edad, setEdad] = useState('');
   const [telefono, setTelefono] = useState('');
   const [correo, setCorreo] = useState('');
   const [whatsapp, setWhatsapp] = useState('');
@@ -110,7 +111,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   }, [fetchData, evento.id]);
 
   const resetForm = () => {
-    setNombre(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
+    setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
     setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setTipo('Encuentrista');
   };
 
@@ -149,7 +150,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           .from('registros')
           .insert({
             nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
-            whatsapp: whatsapp.trim() || null,
+            whatsapp: whatsapp.trim() || null, edad: edad ? parseInt(edad) : null,
             nacion_id: hasEquipos ? null : nacionId, equipo_id: hasEquipos ? equipoId : null,
             evento_id: evento.id, tipo: 'general', status: 'liquidado',
             monto_total: 0, monto_pagado: 0, precio_boleto: 0,
@@ -198,7 +199,11 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           .insert({
             nombre: boletoNames[i], telefono: i === 0 ? (telefono.trim() || null) : null,
             correo: i === 0 ? (correo.trim() || null) : null,
-            nacion_id: nacionId, evento_id: evento.id, tipo, status: statusBoleto,
+            whatsapp: i === 0 ? (whatsapp.trim() || null) : null,
+            edad: i === 0 && edad ? parseInt(edad) : null,
+            nacion_id: hasEquipos ? null : (nacionId || null),
+            equipo_id: hasEquipos ? (equipoId || null) : null,
+            evento_id: evento.id, tipo, status: statusBoleto,
             monto_total: precioBoleto, monto_pagado: pagoBoleto, precio_boleto: precioBoleto,
             notas: numBoletos > 1 ? `Grupo de ${nombre.trim()} (${numBoletos} boletos)` : null,
           })
@@ -381,6 +386,14 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                     <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Nombre de la persona"
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
+                  {/* Edad — for events with equipos (campamento style) */}
+                  {hasEquipos && !isFreeEvent && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Edad</label>
+                      <input type="number" value={edad} onChange={e => setEdad(e.target.value)} placeholder="Ej: 17"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                  )}
                   {evento.slug === 'encuentro' && !isFreeEvent && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
@@ -449,26 +462,61 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                     </div>
                   )}
                   </>)}
-                  {/* Equipo selector (for events with equipos like HollyFest) */}
+                  {/* Equipo/Escuadrón selector */}
                   {hasEquipos && (
                     <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Equipo *</label>
-                      <div className="space-y-2">
-                        {equipos.map(eq => (
-                          <button key={eq.id} onClick={() => setEquipoId(eq.id)}
-                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all flex items-center gap-3 ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                            style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                            <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
-                            {eq.nombre}
-                          </button>
-                        ))}
-                      </div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                        {isFreeEvent ? 'Equipo *' : 'Escuadrón *'}
+                      </label>
+                      {(() => {
+                        const generos = [...new Set(equipos.map(e => e.genero).filter(Boolean))];
+                        const hasGeneros = generos.length > 0;
+                        return (
+                          <div className="space-y-3">
+                            {hasGeneros ? generos.map(g => (
+                              <div key={g}>
+                                <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                                  {g === 'mujeres' ? '👩 Mujeres' : '👨 Hombres'}
+                                </div>
+                                <div className="space-y-1.5">
+                                  {equipos.filter(eq => eq.genero === g).map(eq => (
+                                    <button key={eq.id} onClick={() => setEquipoId(eq.id)}
+                                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                                      style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                                      <div className="flex items-center gap-2">
+                                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
+                                        <span className="font-medium">{eq.nombre}</span>
+                                      </div>
+                                      {(eq.lider || eq.consejero) && (
+                                        <div className="text-[10px] mt-0.5 ml-5" style={{ color: 'var(--color-text-muted)' }}>
+                                          {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}
+                                        </div>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            )) : (
+                              <div className="space-y-1.5">
+                                {equipos.map(eq => (
+                                  <button key={eq.id} onClick={() => setEquipoId(eq.id)}
+                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all flex items-center gap-3 ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                                    style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
+                                    {eq.nombre}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   )}
-                  {/* Nación selector (for events without equipos) */}
-                  {!hasEquipos && (
+                  {/* Nación — for events that use naciones (paid without equipos, or paid with equipos that also need nación) */}
+                  {(!hasEquipos || (hasEquipos && !isFreeEvent)) && (
                     <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación *</label>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación {!hasEquipos ? '*' : ''}</label>
                       <select value={nacionId} onChange={e => setNacionId(e.target.value)}
                         className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
                         <option value="">Seleccionar nación...</option>
@@ -476,14 +524,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </select>
                     </div>
                   )}
-                  {/* WhatsApp (for events that use it) */}
-                  {hasEquipos && (
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>WhatsApp *</label>
-                      <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="10 dígitos"
-                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                    </div>
-                  )}
+                  {/* WhatsApp */}
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>WhatsApp</label>
+                    <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="10 dígitos"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  {/* Teléfono — only for events without equipos */}
                   {!hasEquipos && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
@@ -491,13 +538,12 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                         className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                     </div>
                   )}
-                  {!hasEquipos && (
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
-                      <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
-                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                    </div>
-                  )}
+                  {/* Correo */}
+                  <div>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>
+                    <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
                 </div>
               </div>
 

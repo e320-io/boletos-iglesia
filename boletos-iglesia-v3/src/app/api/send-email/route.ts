@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
       .select(`
         *,
         nacion:naciones(nombre, color),
-        asientos(id),
+        asientos(id, fila, columna),
         pagos(monto, metodo_pago, created_at)
       `)
       .eq('id', registroId)
@@ -35,9 +35,13 @@ export async function POST(request: NextRequest) {
 
     // Detect event for theming
     let eventoSlug = 'default';
+    let eventoNombre = 'Evento';
     if (registro.evento_id) {
       const { data: evento } = await supabase.from('eventos').select('slug, nombre').eq('id', registro.evento_id).single();
-      if (evento) eventoSlug = evento.slug;
+      if (evento) {
+        eventoSlug = evento.slug;
+        eventoNombre = evento.nombre;
+      }
     }
 
     // Theme colors for email
@@ -67,7 +71,7 @@ export async function POST(request: NextRequest) {
     if (grupoIds && grupoIds.length > 1) {
       const { data: grupoData } = await supabase
         .from('registros')
-        .select('*, asientos(id), pagos(monto, metodo_pago, created_at)')
+        .select('*, asientos(id, fila, columna), pagos(monto, metodo_pago, created_at)')
         .in('id', grupoIds)
         .order('created_at');
       grupoBoletos = grupoData || [];
@@ -79,7 +83,7 @@ export async function POST(request: NextRequest) {
       if (match) {
         const { data: grupoData } = await supabase
           .from('registros')
-          .select('*, asientos(id), pagos(monto, metodo_pago, created_at)')
+          .select('*, asientos(id, fila, columna), pagos(monto, metodo_pago, created_at)')
           .eq('notas', registro.notas)
           .order('created_at');
         grupoBoletos = grupoData || [];
@@ -106,11 +110,14 @@ export async function POST(request: NextRequest) {
       new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     )[0];
 
+    // Helper to get seat label (fila+columna or id if legacy format)
+    const getSeatLabel = (a: any) => a.fila && a.columna ? `${a.fila}${a.columna}` : a.id;
+
     // Build asientos display
     let asientosHtml = '';
     if (isGrupo) {
       asientosHtml = grupoBoletos.map((b: any) => {
-        const seats = (b.asientos || []).map((a: any) => a.id);
+        const seats = (b.asientos || []).map((a: any) => getSeatLabel(a));
         const seatBadge = seats.length > 0
           ? seats.map((s: string) => `<span style="display:inline-block;background:${emailColors.accent};color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${s}</span>`).join('')
           : '<span style="color:#999;">Pendiente</span>';
@@ -122,7 +129,7 @@ export async function POST(request: NextRequest) {
     } else {
       asientosHtml = (registro.asientos || []).length > 0
         ? (registro.asientos || []).map((a: any) =>
-          `<span style="display:inline-block;background:${emailColors.accent};color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${a.id}</span>`
+          `<span style="display:inline-block;background:${emailColors.accent};color:#fff;padding:4px 12px;border-radius:20px;font-weight:700;font-size:13px;margin:2px 4px 2px 0;">${getSeatLabel(a)}</span>`
         ).join('')
         : '<span style="color:#999;">General</span>';
     }
@@ -137,11 +144,11 @@ export async function POST(request: NextRequest) {
 <body style="margin:0;padding:0;background:${emailColors.bodyBg};font-family:${emailColors.fontFamily};">
   <div style="max-width:600px;margin:0 auto;background:${emailColors.cardBg};border-radius:12px;overflow:hidden;margin-top:20px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.1);">
     <div style="background:${emailColors.headerBg};padding:32px;text-align:left;">
-      <h1 style="color:#ffffff;font-size:${isLegacy ? '28px' : '24px'};margin:0 0 8px 0;font-weight:700;${isLegacy ? "font-family:'Georgia',serif;letter-spacing:2px;" : ''}">
-        ${isLegacy ? 'LEGACY WOMAN' : 'Comprobante de Boleto'}
+      <h1 style="color:#ffffff;font-size:24px;margin:0 0 8px 0;font-weight:700;">
+        ${eventoNombre}
       </h1>
       <p style="color:rgba(255,255,255,0.7);font-size:14px;margin:0;">
-        ${isLegacy ? 'Congreso de Mujeres — Comprobante de Boleto' : 'Gracias por tu registro. Aquí están los detalles.'}
+        Comprobante de Boleto
       </p>
     </div>
     <div style="padding:32px;">
@@ -205,11 +212,11 @@ export async function POST(request: NextRequest) {
 </html>`;
 
     const subject = isGrupo
-      ? `Comprobante de ${grupoBoletos.length} boletos - ${registro.nombre}`
-      : `Comprobante de boleto - ${registro.nombre}`;
+      ? `${eventoNombre} — Comprobante de ${grupoBoletos.length} boletos - ${registro.nombre}`
+      : `${eventoNombre} — Comprobante de boleto - ${registro.nombre}`;
 
     const info = await transporter.sendMail({
-      from: `"${eventName}" <${process.env.GMAIL_USER || 'registrornmx@gmail.com'}>`,
+      from: `"${eventoNombre}" <${process.env.GMAIL_USER || 'registrornmx@gmail.com'}>`,
       to: registro.correo,
       subject,
       html: htmlEmail,

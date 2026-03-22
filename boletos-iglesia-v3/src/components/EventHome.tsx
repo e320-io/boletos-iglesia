@@ -67,6 +67,11 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const [montoPago, setMontoPago] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
   const [metodosPorBoleto, setMetodosPorBoleto] = useState<MetodoPago[]>([]);
+  const [splitPayment, setSplitPayment] = useState(false);
+  const [splitMontos, setSplitMontos] = useState<{ metodo: MetodoPago; monto: string }[]>([
+    { metodo: 'efectivo', monto: '' },
+    { metodo: 'tarjeta', monto: '' },
+  ]);
   const [precioBoleto, setPrecioBoleto] = useState(evento.precio_default);
 
   // Equipos for events like HollyFest
@@ -113,12 +118,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
 
   const resetForm = () => {
     setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
-    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setTipo('Encuentrista');
+    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setSplitPayment(false); setSplitMontos([{ metodo: 'efectivo', monto: '' }, { metodo: 'tarjeta', monto: '' }]); setTipo('Encuentrista');
   };
 
   // Computed: total based on number of boletos
   const montoTotal = precioBoleto * numBoletos;
-  const montoAbono = parseFloat(montoPago) || 0;
+  const splitTotal = splitPayment ? splitMontos.reduce((s, x) => s + (parseFloat(x.monto) || 0), 0) : 0;
+  const montoAbono = splitPayment ? splitTotal : (parseFloat(montoPago) || 0);
   const willBeLiquidado = isFreeEvent || montoAbono >= montoTotal;
   const hasEquipos = equipos.length > 0;
 
@@ -219,10 +225,21 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           if (seatError) throw seatError;
         }
 
-        // Record individual payment with per-boleto method if set
-        if (pagoBoleto > 0) {
-          const boletoMetodo = (numBoletos > 1 && metodosPorBoleto[i]) ? metodosPorBoleto[i] : metodoPago;
-          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoBoleto, metodo_pago: boletoMetodo });
+        // Record payments
+        if (splitPayment) {
+          // Split payment: distribute each split entry proportionally across boletos
+          for (const sp of splitMontos) {
+            const spMonto = parseFloat(sp.monto) || 0;
+            if (spMonto <= 0) continue;
+            const perBoleto = Math.floor(spMonto / numBoletos);
+            const remainder = spMonto - (perBoleto * numBoletos);
+            const share = i === 0 ? perBoleto + remainder : perBoleto;
+            if (share > 0) {
+              await supabase.from('pagos').insert({ registro_id: registro.id, monto: share, metodo_pago: sp.metodo });
+            }
+          }
+        } else if (pagoBoleto > 0) {
+          await supabase.from('pagos').insert({ registro_id: registro.id, monto: pagoBoleto, metodo_pago: metodoPago });
         }
       }
 
@@ -561,47 +578,61 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
-                    {numBoletos > 1 && willBeLiquidado ? (
-                      /* Per-boleto payment method when liquidating multiple */
-                      <div className="space-y-2">
-                        {Array.from({ length: numBoletos }, (_, i) => {
-                          const boletoName = i === 0 ? (nombre || 'Boleto 1') : (guestNames[i - 1]?.trim() || `${nombre || 'Titular'} - Invitada ${i}`);
-                          const metodo = metodosPorBoleto[i] || 'efectivo';
-                          return (
-                            <div key={i} className="flex items-center gap-2 p-2 rounded-lg" style={{ background: 'var(--color-bg)' }}>
-                              <span className="w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold text-white flex-shrink-0" style={{ background: 'var(--color-accent)' }}>{i + 1}</span>
-                              <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text-muted)' }}>{boletoName}</span>
-                              <div className="flex gap-1">
-                                {METODOS_PAGO.map(m => (
-                                  <button key={m.value} onClick={() => {
-                                    const updated = [...metodosPorBoleto];
-                                    while (updated.length <= i) updated.push('efectivo');
-                                    updated[i] = m.value as MetodoPago;
-                                    setMetodosPorBoleto(updated);
-                                  }}
-                                    className={`px-2 py-1 rounded text-[10px] border transition-all ${metodo === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-500'}`}
-                                    style={metodo === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                                    {m.icon}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ) : (
-                      /* Single payment method */
+                    {!splitPayment ? (
                       <div className="grid grid-cols-2 gap-2">
                         {METODOS_PAGO.map(m => (
                           <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                            className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            className={`px-3 py-2 rounded-lg text-sm border transition-all ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                             style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                            <span>{m.icon}</span><span>{m.label}</span>
+                            {m.label}
                           </button>
                         ))}
                       </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {splitMontos.map((s, i) => (
+                          <div key={i} className="flex items-center gap-2">
+                            <select value={s.metodo} onChange={e => {
+                              const updated = [...splitMontos];
+                              updated[i] = { ...updated[i], metodo: e.target.value as MetodoPago };
+                              setSplitMontos(updated);
+                            }} className="px-2 py-2 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                              {METODOS_PAGO.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                            </select>
+                            <div className="relative flex-1">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                              <input type="number" value={s.monto} onChange={e => {
+                                const updated = [...splitMontos];
+                                updated[i] = { ...updated[i], monto: e.target.value };
+                                setSplitMontos(updated);
+                              }} placeholder="Monto" className="w-full pl-7 pr-3 py-2 rounded-lg text-sm border bg-transparent"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                            </div>
+                            {splitMontos.length > 2 && (
+                              <button onClick={() => setSplitMontos(splitMontos.filter((_, idx) => idx !== i))}
+                                className="text-xs px-2 py-2 rounded hover:text-red-400" style={{ color: 'var(--color-text-muted)' }}>✕</button>
+                            )}
+                          </div>
+                        ))}
+                        <div className="flex items-center justify-between">
+                          <button onClick={() => setSplitMontos([...splitMontos, { metodo: 'transferencia', monto: '' }])}
+                            className="text-xs underline" style={{ color: 'var(--color-accent)' }}>+ Agregar método</button>
+                          <span className="text-xs" style={{ color: splitMontos.reduce((s, x) => s + (parseFloat(x.monto) || 0), 0) === montoTotal ? '#10b981' : 'var(--color-text-muted)' }}>
+                            Total: ${splitMontos.reduce((s, x) => s + (parseFloat(x.monto) || 0), 0).toLocaleString()} / ${montoTotal.toLocaleString()}
+                          </span>
+                        </div>
+                      </div>
                     )}
+                    <button onClick={() => {
+                      setSplitPayment(!splitPayment);
+                      if (!splitPayment) {
+                        setSplitMontos([{ metodo: 'efectivo', monto: '' }, { metodo: 'tarjeta', monto: '' }]);
+                      }
+                    }} className="text-xs mt-2 underline" style={{ color: 'var(--color-text-muted)' }}>
+                      {splitPayment ? 'Un solo método de pago' : 'Dividir pago en varios métodos'}
+                    </button>
                   </div>
+                  {!splitPayment && (
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto a pagar</label>
                     <div className="relative">
@@ -611,6 +642,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                     </div>
                     <button onClick={() => setMontoPago(montoTotal.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Pagar total</button>
                   </div>
+                  )}
 
                   {/* Hint: seat map will appear when liquidando */}
                   {evento.tiene_asientos && !willBeLiquidado && montoAbono > 0 && (

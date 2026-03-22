@@ -37,6 +37,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Edit payment date
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editPaymentDate, setEditPaymentDate] = useState('');
+
   // Seat assignment
   const [selectedSeatForAssign, setSelectedSeatForAssign] = useState<string[]>([]);
   const [changingSeat, setChangingSeat] = useState(false);
@@ -556,10 +560,32 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <div key={p.id} className="flex items-center justify-between py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
                       <div>
                         <div className="text-sm font-medium">{metodoPagoLabels[p.metodo_pago]}</div>
-                        <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                          {new Date(p.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
-                          {p.referencia && ` · Ref: ${p.referencia}`}
-                        </div>
+                        {editingPaymentId === p.id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <input type="date" value={editPaymentDate}
+                              onChange={e => setEditPaymentDate(e.target.value)}
+                              className="px-2 py-1 rounded text-xs border bg-transparent"
+                              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                            <button onClick={async () => {
+                              if (!editPaymentDate) return;
+                              const newDate = new Date(editPaymentDate + 'T12:00:00').toISOString();
+                              await supabase.from('pagos').update({ created_at: newDate }).eq('id', p.id);
+                              setEditingPaymentId(null);
+                              onRefresh(); onBack();
+                            }} className="text-xs px-2 py-1 rounded bg-emerald-500 text-white">Guardar</button>
+                            <button onClick={() => setEditingPaymentId(null)}
+                              className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
+                          </div>
+                        ) : (
+                          <div className="text-xs flex items-center gap-2" style={{ color: 'var(--color-text-muted)' }}>
+                            {new Date(p.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                            {p.referencia && ` · Ref: ${p.referencia}`}
+                            <button onClick={() => {
+                              setEditingPaymentId(p.id);
+                              setEditPaymentDate(new Date(p.created_at).toISOString().split('T')[0]);
+                            }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar fecha</button>
+                          </div>
+                        )}
                       </div>
                       <div className="text-lg font-bold text-emerald-400">+${Number(p.monto).toLocaleString()}</div>
                     </div>

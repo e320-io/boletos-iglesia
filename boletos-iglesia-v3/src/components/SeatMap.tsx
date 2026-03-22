@@ -7,6 +7,7 @@ interface SeatMapProps {
   asientos: Asiento[];
   selectedSeats: string[];
   onSeatClick: (seatId: string) => void;
+  onOccupiedClick?: (seat: Asiento) => void;
   readOnly?: boolean;
   highlightSeats?: string[];
 }
@@ -17,6 +18,7 @@ function SeatSection({
   asientos,
   selectedSeats,
   onSeatClick,
+  onOccupiedClick,
   readOnly,
   highlightSeats,
 }: {
@@ -25,6 +27,7 @@ function SeatSection({
   asientos: Asiento[];
   selectedSeats: string[];
   onSeatClick: (seatId: string) => void;
+  onOccupiedClick?: (seat: Asiento) => void;
   readOnly?: boolean;
   highlightSeats?: string[];
 }) {
@@ -55,6 +58,7 @@ function SeatSection({
             const isSelected = selectedSeats.includes(seat.id);
             const isHighlighted = highlightSeats?.includes(seat.id);
             const canClick = !readOnly && seat.estado === 'disponible';
+            const isOccupied = seat.estado === 'ocupado';
 
             let className = 'seat';
             if (isSelected) {
@@ -72,8 +76,10 @@ function SeatSection({
                 onClick={() => {
                   if (isSelected) onSeatClick(seat.id);
                   else if (canClick) onSeatClick(seat.id);
+                  else if (isOccupied && onOccupiedClick) onOccupiedClick(seat);
                 }}
-                disabled={!canClick && !isSelected}
+                disabled={!canClick && !isSelected && !(isOccupied && onOccupiedClick)}
+                style={isOccupied && onOccupiedClick ? { cursor: 'pointer' } : {}}
                 title={`${seatCode} — ${isSelected ? 'Seleccionado' : seat.estado}`}
               >
                 {seatCode}
@@ -86,7 +92,7 @@ function SeatSection({
   );
 }
 
-export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly, highlightSeats }: SeatMapProps) {
+export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupiedClick, readOnly, highlightSeats }: SeatMapProps) {
   return (
     <div className="overflow-x-auto">
       {/* Escenario */}
@@ -121,6 +127,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly
           selectedSeats={selectedSeats}
           onSeatClick={onSeatClick}
           readOnly={readOnly}
+          onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
         />
         <SeatSection
@@ -130,6 +137,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly
           selectedSeats={selectedSeats}
           onSeatClick={onSeatClick}
           readOnly={readOnly}
+          onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
         />
       </div>
@@ -143,6 +151,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly
           selectedSeats={selectedSeats}
           onSeatClick={onSeatClick}
           readOnly={readOnly}
+          onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
         />
         <SeatSection
@@ -152,6 +161,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly
           selectedSeats={selectedSeats}
           onSeatClick={onSeatClick}
           readOnly={readOnly}
+          onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
         />
       </div>
@@ -165,6 +175,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, readOnly
           selectedSeats={selectedSeats}
           onSeatClick={onSeatClick}
           readOnly={readOnly}
+          onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
         />
       </div>

@@ -142,7 +142,6 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
             for (const row of sec.rows) {
               for (const col of sec.cols) {
                 seats.push({
-                  id: `${row}${col}`,
                   fila: row,
                   columna: col,
                   seccion: sec.seccion,

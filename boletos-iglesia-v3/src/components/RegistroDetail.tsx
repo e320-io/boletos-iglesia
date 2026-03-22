@@ -39,6 +39,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
 
   // Seat assignment
   const [selectedSeatForAssign, setSelectedSeatForAssign] = useState<string[]>([]);
+  const [changingSeat, setChangingSeat] = useState(false);
+
+  // Helper to get seat label
+  const getSeatLabel = (a: any) => a.fila && a.columna ? `${a.fila}${a.columna}` : a.id;
 
   // Group (grupo) detection — find related boletos by notas field
   const grupoTag = (registro.notas || '').match(/^Grupo de .+ \(\d+ boletos\)$/)?.[0];
@@ -150,6 +154,36 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         await logActivity({ userId: user.id, userName: user.nombre, action: 'asiento_asignado', detail: `${registro.nombre} → ${selectedSeatForAssign.join(', ')}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
       }
       setSelectedSeatForAssign([]);
+      onRefresh(); onBack();
+    } catch (error: any) {
+      addToast('error', `Error: ${error.message}`);
+    } finally { setLoading(false); }
+  };
+
+  const handleChangeSeat = async () => {
+    if (selectedSeatForAssign.length === 0) { addToast('error', 'Selecciona el nuevo asiento'); return; }
+    setLoading(true);
+    try {
+      // Free current seats
+      for (const a of registroAsientos) {
+        await supabase.from('asientos').update({ estado: 'disponible', registro_id: null }).eq('id', a.id);
+      }
+      // Assign new seats
+      const { error } = await supabase
+        .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeatForAssign);
+      if (error) throw error;
+
+      const oldSeats = registroAsientos.map((a: any) => getSeatLabel(a)).join(', ');
+      const newSeatLabels = selectedSeatForAssign.map(id => {
+        const seat = asientos.find(a => a.id === id);
+        return seat ? `${seat.fila}${seat.columna}` : id;
+      }).join(', ');
+
+      addToast('success', `Asiento cambiado: ${oldSeats} → ${newSeatLabels}`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'asiento_asignado', detail: `${registro.nombre}: ${oldSeats} → ${newSeatLabels}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
+      setChangingSeat(false); setSelectedSeatForAssign([]);
       onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error: ${error.message}`);
@@ -330,9 +364,15 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                   <div><span style={{ color: 'var(--color-text-muted)' }}>Correo:</span><span className="ml-2">{registro.correo || '—'}</span></div>
                   <div>
                     <span style={{ color: 'var(--color-text-muted)' }}>Asientos:</span>
-                    <span className="ml-2 inline-flex gap-1">
+                    <span className="ml-2 inline-flex gap-1 items-center">
                       {registroAsientos.length > 0
-                        ? registroAsientos.map((a: any) => <span key={a.id} className="px-1.5 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{a.id}</span>)
+                        ? (<>
+                            {registroAsientos.map((a: any) => <span key={a.id} className="px-1.5 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{getSeatLabel(a)}</span>)}
+                            <button onClick={() => { setChangingSeat(!changingSeat); setSelectedSeatForAssign([]); }}
+                              className="ml-2 text-[10px] underline" style={{ color: 'var(--color-text-muted)' }}>
+                              {changingSeat ? 'Cancelar' : 'Cambiar'}
+                            </button>
+                          </>)
                         : <span style={{ color: 'var(--color-text-muted)' }}>{tieneAsientos ? (isLiquidado ? 'Pendiente de asignar' : 'Se asigna al liquidar') : 'N/A'}</span>
                       }
                     </span>
@@ -549,7 +589,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                         <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
                           className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                           style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          <span>{m.icon}</span><span>{m.label}</span>
+                          {m.label}
                         </button>
                       ))}
                     </div>
@@ -567,11 +607,13 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                   {/* Hint that map is below */}
                   {willLiquidate && (
                     <div className="rounded-lg p-3 text-xs text-center" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
-                      🪑 Este pago liquida el boleto — selecciona asiento en el mapa de abajo
+                      Este pago liquida el boleto — selecciona asiento en el mapa de abajo
                       {selectedSeatForAssign.length > 0 && (
-                        <span className="ml-2 inline-flex gap-1">{selectedSeatForAssign.map(s => (
-                          <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
-                        ))}</span>
+                        <span className="ml-2 inline-flex gap-1">{selectedSeatForAssign.map(id => {
+                          const seat = asientos.find(a => a.id === id);
+                          const label = seat ? `${seat.fila}${seat.columna}` : id;
+                          return <span key={id} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{label}</span>;
+                        })}</span>
                       )}
                     </div>
                   )}
@@ -595,26 +637,39 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         )}
       </div>
 
-      {/* Full-width seat map — appears when liquidating individual, group, or already liquidado without seat */}
-      {!editing && ((willLiquidate) || canAssignSeat || (showGroupLiquidation && groupWillLiquidate && grupoSinAsiento.length > 0)) && (
-        <div className="mt-6 rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: '#f59e0b', boxShadow: '0 0 15px rgba(245,158,11,0.1)' }}>
+      {/* Full-width seat map — appears when liquidating, assigning, changing, or group */}
+      {!editing && ((willLiquidate) || canAssignSeat || changingSeat || (showGroupLiquidation && groupWillLiquidate && grupoSinAsiento.length > 0)) && (
+        <div className="mt-6 rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: changingSeat ? 'var(--color-accent)' : '#f59e0b', boxShadow: changingSeat ? '0 0 15px rgba(0,188,212,0.1)' : '0 0 15px rgba(245,158,11,0.1)' }}>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-bold text-lg" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
-              🪑 {showGroupLiquidation
-                ? `Selecciona ${grupoSinAsiento.length} asiento${grupoSinAsiento.length > 1 ? 's' : ''} para el grupo`
-                : willLiquidate
-                  ? 'Este pago liquida el boleto — selecciona asiento'
-                  : 'Asignar Asiento'}
+            <h3 className="font-bold text-lg" style={{ fontFamily: 'var(--font-display)', color: changingSeat ? 'var(--color-accent)' : '#f59e0b' }}>
+              {changingSeat
+                ? `Cambiar asiento — selecciona el nuevo lugar`
+                : showGroupLiquidation
+                  ? `Selecciona ${grupoSinAsiento.length} asiento${grupoSinAsiento.length > 1 ? 's' : ''} para el grupo`
+                  : willLiquidate
+                    ? 'Este pago liquida el boleto — selecciona asiento'
+                    : 'Asignar Asiento'}
             </h3>
             {(() => {
               const seats = showGroupLiquidation ? groupSeats : selectedSeatForAssign;
+              const seatLabels = seats.map(id => {
+                const seat = asientos.find(a => a.id === id);
+                return seat ? `${seat.fila}${seat.columna}` : id;
+              });
               return seats.length > 0 ? (
                 <div className="flex items-center gap-2">
                   <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Seleccionado:</span>
-                  {seats.map(s => (
-                    <span key={s} className="px-3 py-1 rounded-lg text-sm font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
+                  {seatLabels.map((label, idx) => (
+                    <span key={seats[idx]} className="px-3 py-1 rounded-lg text-sm font-bold text-white" style={{ background: 'var(--color-accent)' }}>{label}</span>
                   ))}
-                  {canAssignSeat && !showGroupLiquidation && (
+                  {changingSeat && (
+                    <button onClick={handleChangeSeat} disabled={loading}
+                      className="ml-2 px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
+                      style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
+                      {loading ? 'Cambiando...' : 'Confirmar Cambio'}
+                    </button>
+                  )}
+                  {canAssignSeat && !showGroupLiquidation && !changingSeat && (
                     <button onClick={handleAssignSeat} disabled={loading}
                       className="ml-2 px-4 py-2 rounded-lg text-sm font-bold text-white disabled:opacity-40"
                       style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>

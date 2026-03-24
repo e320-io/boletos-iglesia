@@ -19,9 +19,7 @@ interface Evento {
 }
 
 declare global {
-  interface Window {
-    MercadoPago: any;
-  }
+  interface Window { MercadoPago: any; }
 }
 
 export default function ComprarPage() {
@@ -34,8 +32,6 @@ export default function ComprarPage() {
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
   const [mpReady, setMpReady] = useState(false);
-
-  // Form
   const [nombre, setNombre] = useState('');
   const [correo, setCorreo] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -45,399 +41,336 @@ export default function ComprarPage() {
   const [equipoId, setEquipoId] = useState('');
   const [numBoletos, setNumBoletos] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
-
-  // Step
   const [step, setStep] = useState<'eventos' | 'datos' | 'asientos' | 'pago'>('eventos');
-
-  // MP widget container
-  const walletContainerRef = useRef<HTMLDivElement>(null);
+  const walletRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase.from('eventos').select('*').eq('activo', true).eq('es_gratuito', false).order('fecha')
       .then(({ data }) => { if (data) setEventos(data as Evento[]); setLoading(false); });
   }, []);
 
-  const loadEventData = useCallback(async (evento: Evento) => {
-    const [nRes, eqRes, aRes] = await Promise.all([
+  const loadEventData = useCallback(async (ev: Evento) => {
+    const [nR, eR, aR] = await Promise.all([
       supabase.from('naciones').select('*').order('nombre'),
-      supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre'),
-      evento.tiene_asientos
-        ? supabase.from('asientos').select('*').eq('evento_id', evento.id)
-        : Promise.resolve({ data: [] }),
+      supabase.from('equipos_evento').select('*').eq('evento_id', ev.id).order('nombre'),
+      ev.tiene_asientos ? supabase.from('asientos').select('*').eq('evento_id', ev.id) : Promise.resolve({ data: [] }),
     ]);
-    if (nRes.data) setNaciones(nRes.data);
-    if (eqRes.data) setEquipos(eqRes.data);
-    if (aRes.data) setAsientos(aRes.data as Asiento[]);
+    if (nR.data) setNaciones(nR.data);
+    if (eR.data) setEquipos(eR.data);
+    if (aR.data) setAsientos(aR.data as Asiento[]);
   }, []);
 
-  const handleSelectEvento = (evento: Evento) => {
-    setSelectedEvento(evento);
-    loadEventData(evento);
-    setStep('datos');
-  };
+  const selectEvento = (ev: Evento) => { setSelectedEvento(ev); loadEventData(ev); setStep('datos'); };
 
-  const handleSeatClick = (seatId: string) => {
-    setSelectedSeats(prev => {
-      if (prev.includes(seatId)) return prev.filter(s => s !== seatId);
-      if (prev.length >= numBoletos) return [...prev.slice(1), seatId];
-      return [...prev, seatId];
+  const handleSeatClick = (id: string) => {
+    setSelectedSeats(p => {
+      if (p.includes(id)) return p.filter(s => s !== id);
+      if (p.length >= numBoletos) return [...p.slice(1), id];
+      return [...p, id];
     });
   };
 
-  const handleDatosNext = () => {
-    if (!nombre.trim()) { setError('El nombre es requerido'); return; }
-    if (!correo.trim()) { setError('El correo es requerido para enviarte tu comprobante'); return; }
-    setError('');
-    if (selectedEvento?.tiene_asientos) {
-      setStep('asientos');
-    } else {
-      setStep('pago');
-    }
+  const nextFromDatos = () => {
+    if (!nombre.trim()) { setError('Ingresa tu nombre'); return; }
+    if (!correo.trim()) { setError('Ingresa tu correo para recibir el boleto'); return; }
+    setError(''); setStep(selectedEvento?.tiene_asientos ? 'asientos' : 'pago');
   };
 
-  const handleAsientosNext = () => {
-    if (selectedSeats.length < numBoletos) {
-      setError(`Selecciona ${numBoletos} asiento${numBoletos > 1 ? 's' : ''}`);
-      return;
-    }
-    setError('');
-    setStep('pago');
+  const nextFromAsientos = () => {
+    if (selectedSeats.length < numBoletos) { setError(`Selecciona ${numBoletos} asiento${numBoletos > 1 ? 's' : ''}`); return; }
+    setError(''); setStep('pago');
   };
 
-  // Create preference and render MP wallet button
-  const initMercadoPago = useCallback(async () => {
+  const initMP = useCallback(async () => {
     if (!selectedEvento || !mpReady) return;
-    setProcessing(true);
-    setError('');
-
+    setProcessing(true); setError('');
     try {
       const res = await fetch('/api/mercadopago/create-preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          eventoId: selectedEvento.id,
-          nombre: nombre.trim(),
-          correo: correo.trim(),
-          telefono: telefono.trim() || null,
-          whatsapp: whatsapp.trim() || null,
-          edad: edad || null,
-          nacionId: nacionId || null,
-          equipoId: equipoId || null,
-          asientoIds: selectedSeats.length > 0 ? selectedSeats : null,
-          cantidad: numBoletos,
-        }),
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventoId: selectedEvento.id, nombre: nombre.trim(), correo: correo.trim(),
+          telefono: telefono.trim() || null, whatsapp: whatsapp.trim() || null, edad: edad || null,
+          nacionId: nacionId || null, equipoId: equipoId || null,
+          asientoIds: selectedSeats.length > 0 ? selectedSeats : null, cantidad: numBoletos }),
       });
-
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-
-      // Clear previous widget
-      if (walletContainerRef.current) {
-        walletContainerRef.current.innerHTML = '';
-      }
-
-      // Initialize MP Bricks
+      if (walletRef.current) walletRef.current.innerHTML = '';
       const mp = new window.MercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY, { locale: 'es-MX' });
-      const bricksBuilder = mp.bricks();
-
-      await bricksBuilder.create('wallet', 'wallet_container', {
-        initialization: {
-          preferenceId: data.preferenceId,
-        },
-      });
-
+      await mp.bricks().create('wallet', 'wallet_container', { initialization: { preferenceId: data.preferenceId } });
       setProcessing(false);
-    } catch (err: any) {
-      setError(err.message || 'Error al iniciar el pago');
-      setProcessing(false);
-    }
+    } catch (err: any) { setError(err.message || 'Error al iniciar pago'); setProcessing(false); }
   }, [selectedEvento, mpReady, nombre, correo, telefono, whatsapp, edad, nacionId, equipoId, selectedSeats, numBoletos]);
 
-  // Init MP when entering pago step
-  useEffect(() => {
-    if (step === 'pago' && mpReady) {
-      initMercadoPago();
-    }
-  }, [step, mpReady, initMercadoPago]);
+  useEffect(() => { if (step === 'pago' && mpReady) initMP(); }, [step, mpReady, initMP]);
 
   const total = (selectedEvento?.precio_default || 0) * numBoletos;
   const hasEquipos = equipos.length > 0;
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
-        <p style={{ color: 'var(--color-text-muted)' }}>Cargando eventos...</p>
-      </div>
-    );
-  }
+  const fmtDate = (f: string) => {
+    const d = new Date(f + 'T12:00:00');
+    return { day: d.getDate(), mon: d.toLocaleDateString('es-MX', { month: 'short' }).toUpperCase(),
+      full: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' }) };
+  };
+  const seatLabel = (id: string) => { const s = asientos.find(a => a.id === id); return s ? `${s.fila}${s.columna}` : id; };
 
   return (
-    <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
-      {/* Load MP SDK */}
-      <Script
-        src="https://sdk.mercadopago.com/js/v2"
-        onLoad={() => setMpReady(true)}
-      />
+    <>
+      <Script src="https://sdk.mercadopago.com/js/v2" onLoad={() => setMpReady(true)} />
+      <style jsx global>{`
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800;900&family=Sora:wght@400;600;700;800&display=swap');
+        .cp{min-height:100dvh;background:#0a0e1a;color:#e8eaf0;font-family:'Outfit',sans-serif;overflow-x:hidden}
+        .cp *{box-sizing:border-box}
+        .cp-hd{position:sticky;top:0;z-index:50;background:rgba(10,14,26,.85);backdrop-filter:blur(20px);border-bottom:1px solid rgba(255,255,255,.06);padding:14px 20px}
+        .cp-hd-in{max-width:480px;margin:0 auto;display:flex;align-items:center;justify-content:space-between}
+        .cp-logo{font-family:'Sora',sans-serif;font-weight:700;font-size:18px;letter-spacing:-.5px}
+        .cp-logo b{color:#00e5ff}
+        .cp-bk{font-size:13px;color:rgba(255,255,255,.4);background:rgba(255,255,255,.06);border:none;padding:6px 14px;border-radius:20px;cursor:pointer;transition:.2s}
+        .cp-mn{max-width:480px;margin:0 auto;padding:20px 16px}
+        .cp-steps{display:flex;align-items:center;gap:4px;margin-bottom:24px}
+        .cp-st{display:flex;align-items:center;gap:6px;flex:1}
+        .cp-dot{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;transition:.3s}
+        .cp-dot.on{background:#00e5ff;color:#0a0e1a;box-shadow:0 0 16px rgba(0,229,255,.25)}
+        .cp-dot.off{background:rgba(255,255,255,.06);color:rgba(255,255,255,.25)}
+        .cp-ln{flex:1;height:2px;border-radius:1px}
+        .cp-ln.on{background:#00e5ff}.cp-ln.off{background:rgba(255,255,255,.06)}
+        .cp-ec{position:relative;background:linear-gradient(135deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.06);border-radius:18px;overflow:hidden;cursor:pointer;transition:.3s cubic-bezier(.4,0,.2,1);margin-bottom:14px}
+        .cp-ec:active{transform:scale(.98);border-color:rgba(0,229,255,.3)}
+        .cp-ec-in{display:flex;align-items:stretch}
+        .cp-ec-dt{width:68px;flex-shrink:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:rgba(0,229,255,.06);border-right:1px solid rgba(0,229,255,.08);padding:14px 0}
+        .cp-ec-dd{font-family:'Sora',sans-serif;font-size:26px;font-weight:800;color:#00e5ff;line-height:1}
+        .cp-ec-dm{font-size:10px;font-weight:700;color:rgba(0,229,255,.6);letter-spacing:1px;margin-top:2px}
+        .cp-ec-nf{flex:1;padding:16px;display:flex;flex-direction:column;justify-content:center}
+        .cp-ec-tt{font-family:'Sora',sans-serif;font-size:16px;font-weight:700;line-height:1.2;margin-bottom:3px}
+        .cp-ec-ds{font-size:11px;color:rgba(255,255,255,.35);margin-bottom:8px}
+        .cp-ec-ft{display:flex;align-items:center;gap:8px}
+        .cp-ec-pr{font-family:'Sora',sans-serif;font-size:18px;font-weight:800;color:#00e5ff}
+        .cp-ec-bg{font-size:9px;font-weight:600;padding:3px 8px;border-radius:10px;background:rgba(0,229,255,.1);color:#00e5ff}
+        .cp-ec-ar{color:rgba(255,255,255,.15);font-size:20px;padding-right:14px;display:flex;align-items:center}
+        .cp-cd{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:22px;margin-bottom:14px}
+        .cp-ct{font-family:'Sora',sans-serif;font-size:17px;font-weight:700;margin-bottom:18px}
+        .cp-fl{margin-bottom:14px}
+        .cp-lb{display:block;font-size:11px;font-weight:500;color:rgba(255,255,255,.4);margin-bottom:5px;letter-spacing:.3px}
+        .cp-in{width:100%;padding:13px 14px;border-radius:12px;font-size:15px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);color:#e8eaf0;outline:none;font-family:'Outfit',sans-serif;transition:.2s}
+        .cp-in:focus{border-color:rgba(0,229,255,.4);background:rgba(0,229,255,.03)}
+        .cp-in::placeholder{color:rgba(255,255,255,.18)}
+        select.cp-in{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23555' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px}
+        .cp-qty{display:flex;align-items:center;gap:14px}
+        .cp-qb{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);color:#e8eaf0;font-size:18px;font-weight:600;cursor:pointer;transition:.2s}
+        .cp-qb:active{background:rgba(0,229,255,.1);border-color:rgba(0,229,255,.3)}
+        .cp-qn{font-family:'Sora',sans-serif;font-size:30px;font-weight:800;width:44px;text-align:center}
+        .cp-qt{font-size:13px;color:rgba(255,255,255,.35)}
+        .cp-qt b{color:#00e5ff;font-weight:700}
+        .cp-eq{width:100%;text-align:left;padding:12px 14px;border-radius:12px;margin-bottom:6px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.05);color:#e8eaf0;cursor:pointer;transition:.2s;display:flex;align-items:center;gap:10px}
+        .cp-eq.sel{border-color:#00e5ff;background:rgba(0,229,255,.05)}
+        .cp-eq-d{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+        .cp-eq-i{flex:1}
+        .cp-eq-n{font-size:13px;font-weight:600}
+        .cp-eq-s{font-size:10px;color:rgba(255,255,255,.3);margin-top:1px}
+        .cp-eq-c{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.12);display:flex;align-items:center;justify-content:center;font-size:10px;transition:.2s}
+        .cp-eq.sel .cp-eq-c{background:#00e5ff;border-color:#00e5ff;color:#0a0e1a}
+        .cp-gd{font-size:10px;font-weight:700;color:rgba(255,255,255,.25);letter-spacing:1.5px;text-transform:uppercase;margin:14px 0 6px}
+        .cp-bp{width:100%;padding:15px;border-radius:14px;font-size:15px;font-weight:700;font-family:'Sora',sans-serif;border:none;cursor:pointer;transition:.2s;background:linear-gradient(135deg,#00e5ff,#00b8d4);color:#0a0e1a;box-shadow:0 4px 20px rgba(0,229,255,.2)}
+        .cp-bp:active{transform:scale(.98)}.cp-bp:disabled{opacity:.4;cursor:not-allowed;transform:none}
+        .cp-bs{width:100%;padding:13px;border-radius:14px;font-size:14px;font-weight:600;cursor:pointer;transition:.2s;background:transparent;border:1px solid rgba(255,255,255,.08);color:rgba(255,255,255,.4)}
+        .cp-sr{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid rgba(255,255,255,.04);font-size:13px}
+        .cp-sr:last-child{border:none}
+        .cp-sl{color:rgba(255,255,255,.35)}.cp-sv{font-weight:600}
+        .cp-stot{font-family:'Sora',sans-serif;font-size:26px;font-weight:800;color:#00e5ff}
+        .cp-err{background:rgba(255,59,48,.08);border:1px solid rgba(255,59,48,.15);border-radius:12px;padding:10px 14px;font-size:12px;color:#ff6b6b;text-align:center;margin-bottom:14px}
+        .cp-stitle{font-family:'Sora',sans-serif;font-size:20px;font-weight:800;text-align:center;margin-bottom:22px}
+        .cp-sb{padding:4px 10px;border-radius:6px;font-size:12px;font-weight:700;background:#00e5ff;color:#0a0e1a}
+        .cp-sbar{position:sticky;bottom:0;z-index:40;background:rgba(10,14,26,.95);backdrop-filter:blur(20px);border-top:1px solid rgba(255,255,255,.06);padding:14px 16px}
+        .cp-sbar-in{max-width:480px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:12px}
+        .cp-sbar-seats{display:flex;gap:5px;flex-wrap:wrap}
+        @keyframes fu{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+        .cp-a{animation:fu .35s ease-out both}
+        .cp-a1{animation-delay:.04s}.cp-a2{animation-delay:.08s}.cp-a3{animation-delay:.12s}.cp-a4{animation-delay:.16s}
+      `}</style>
 
-      {/* Header */}
-      <header className="border-b" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
-          <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-            Compra de Boletos
-          </h1>
+      <div className="cp">
+        <header className="cp-hd">
+          <div className="cp-hd-in">
+            <div className="cp-logo">Boletos<b>RN</b></div>
+            {selectedEvento && step !== 'eventos' && (
+              <button className="cp-bk" onClick={() => { setStep('eventos'); setSelectedEvento(null); setSelectedSeats([]); setError(''); }}>← Eventos</button>
+            )}
+          </div>
+        </header>
+
+        <main className="cp-mn">
+          {/* Steps */}
           {selectedEvento && step !== 'eventos' && (
-            <button onClick={() => { setStep('eventos'); setSelectedEvento(null); setSelectedSeats([]); setError(''); }}
-              className="text-sm px-3 py-1.5 rounded-lg border" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-              ← Cambiar evento
-            </button>
-          )}
-        </div>
-      </header>
-
-      <main className="max-w-3xl mx-auto p-6">
-        {/* Step indicators */}
-        {selectedEvento && (
-          <div className="flex items-center gap-2 mb-8">
-            {['Datos', selectedEvento.tiene_asientos ? 'Asientos' : null, 'Pago'].filter(Boolean).map((label, i) => {
-              const steps = ['datos', selectedEvento.tiene_asientos ? 'asientos' : null, 'pago'].filter(Boolean) as string[];
-              const currentIdx = steps.indexOf(step);
-              const isActive = i <= currentIdx;
-              return (
-                <div key={label} className="flex items-center gap-2 flex-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold`}
-                    style={{ background: isActive ? 'var(--color-accent)' : 'var(--color-border)', color: isActive ? 'white' : 'var(--color-text-muted)' }}>
-                    {i + 1}
-                  </div>
-                  <span className="text-sm font-medium" style={{ color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)' }}>{label}</span>
-                  {i < steps.length - 1 && <div className="flex-1 h-px" style={{ background: isActive ? 'var(--color-accent)' : 'var(--color-border)' }} />}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* Step 0: Event selection */}
-        {step === 'eventos' && (
-          <div>
-            <h2 className="text-2xl font-bold mb-6 text-center" style={{ fontFamily: 'var(--font-display)' }}>
-              Selecciona un evento
-            </h2>
-            <div className="grid gap-4">
-              {eventos.filter(e => !e.es_gratuito && e.precio_default > 0).map(e => {
-                const fecha = new Date(e.fecha + 'T12:00:00');
-                return (
-                  <button key={e.id} onClick={() => handleSelectEvento(e)}
-                    className="w-full text-left rounded-xl p-6 border transition-all hover:scale-[1.01] hover:shadow-lg"
-                    style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                    <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>{e.nombre}</h3>
-                    <p className="text-sm mt-1" style={{ color: 'var(--color-text-muted)' }}>
-                      {fecha.toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      {e.descripcion && ` — ${e.descripcion}`}
-                    </p>
-                    <div className="flex items-center gap-3 mt-3">
-                      <span className="text-lg font-bold" style={{ color: 'var(--color-accent)' }}>${e.precio_default.toLocaleString()}</span>
-                      {e.tiene_asientos && <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'rgba(0,188,212,0.1)', color: 'var(--color-accent)' }}>Con asientos</span>}
-                    </div>
-                  </button>
-                );
+            <div className="cp-steps cp-a">
+              {['Datos', selectedEvento.tiene_asientos ? 'Asientos' : null, 'Pago'].filter(Boolean).map((l, i) => {
+                const ss = ['datos', selectedEvento.tiene_asientos ? 'asientos' : null, 'pago'].filter(Boolean) as string[];
+                const ci = ss.indexOf(step); const on = i <= ci;
+                return (<div key={l} className="cp-st">
+                  <div className={`cp-dot ${on ? 'on' : 'off'}`}>{i + 1}</div>
+                  <span className="cp-step-label" style={{ fontSize: 12, fontWeight: 500, color: on ? '#e8eaf0' : 'rgba(255,255,255,.25)' }}>{l}</span>
+                  {i < ss.length - 1 && <div className={`cp-ln ${on ? 'on' : 'off'}`} />}
+                </div>);
               })}
-              {eventos.length === 0 && (
-                <p className="text-center py-12" style={{ color: 'var(--color-text-muted)' }}>No hay eventos disponibles</p>
-              )}
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Step 1: Datos */}
-        {step === 'datos' && selectedEvento && (
-          <div className="space-y-4">
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <div className="flex items-center justify-between mb-1">
-                <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>{selectedEvento.nombre}</h2>
-                <span className="text-lg font-bold" style={{ color: 'var(--color-accent)' }}>${selectedEvento.precio_default.toLocaleString()}/boleto</span>
+          {/* EVENTOS */}
+          {step === 'eventos' && (
+            <div>
+              <div className="cp-stitle cp-a">Elige tu evento</div>
+              {loading ? <div style={{ textAlign: 'center', padding: 60, color: 'rgba(255,255,255,.25)' }}>Cargando...</div> :
+                eventos.filter(e => !e.es_gratuito && e.precio_default > 0).map((e, i) => {
+                  const f = fmtDate(e.fecha);
+                  return (
+                    <div key={e.id} className={`cp-ec cp-a cp-a${i + 1}`} onClick={() => selectEvento(e)}>
+                      <div className="cp-ec-in">
+                        <div className="cp-ec-dt"><div className="cp-ec-dd">{f.day}</div><div className="cp-ec-dm">{f.mon}</div></div>
+                        <div className="cp-ec-nf">
+                          <div className="cp-ec-tt">{e.nombre}</div>
+                          {e.descripcion && <div className="cp-ec-ds">{e.descripcion}</div>}
+                          <div className="cp-ec-ft">
+                            <div className="cp-ec-pr">${e.precio_default.toLocaleString()}</div>
+                            {e.tiene_asientos && <div className="cp-ec-bg">Con asientos</div>}
+                          </div>
+                        </div>
+                        <div className="cp-ec-ar">›</div>
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </div>
+          )}
+
+          {/* DATOS */}
+          {step === 'datos' && selectedEvento && (
+            <div>
+              <div className="cp-cd cp-a" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div>
+                  <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 700, fontSize: 15 }}>{selectedEvento.nombre}</div>
+                  <div style={{ fontSize: 11, color: 'rgba(255,255,255,.35)', marginTop: 2 }}>{fmtDate(selectedEvento.fecha).full}</div>
+                </div>
+                <div style={{ fontFamily: "'Sora',sans-serif", fontWeight: 800, fontSize: 18, color: '#00e5ff' }}>${selectedEvento.precio_default.toLocaleString()}</div>
               </div>
-              <p className="text-xs mb-5" style={{ color: 'var(--color-text-muted)' }}>
-                {new Date(selectedEvento.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
-                  <input type="text" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="Tu nombre completo"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo electrónico *</label>
-                  <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com (aquí recibes tu comprobante)"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono / WhatsApp</label>
-                  <input type="tel" value={telefono} onChange={e => { setTelefono(e.target.value); setWhatsapp(e.target.value); }} placeholder="10 dígitos"
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                </div>
+              <div className="cp-cd cp-a cp-a1">
+                <div className="cp-ct">Tus datos</div>
+                <div className="cp-fl"><label className="cp-lb">Nombre completo *</label><input className="cp-in" value={nombre} onChange={e => setNombre(e.target.value)} placeholder="¿Cómo te llamas?" /></div>
+                <div className="cp-fl"><label className="cp-lb">Correo *</label><input type="email" className="cp-in" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="Para enviarte tu boleto" /></div>
+                <div className="cp-fl"><label className="cp-lb">Teléfono / WhatsApp</label><input type="tel" className="cp-in" value={telefono} onChange={e => { setTelefono(e.target.value); setWhatsapp(e.target.value); }} placeholder="10 dígitos" /></div>
                 {hasEquipos && equipos.some(e => e.genero) && (
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Edad</label>
-                    <input type="number" value={edad} onChange={e => setEdad(e.target.value)} placeholder="Tu edad"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
+                  <div className="cp-fl"><label className="cp-lb">Edad</label><input type="number" className="cp-in" value={edad} onChange={e => setEdad(e.target.value)} placeholder="Tu edad" /></div>
                 )}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación</label>
-                  <select value={nacionId} onChange={e => setNacionId(e.target.value)}
-                    className="w-full px-3 py-2.5 rounded-lg text-sm border" style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                    <option value="">Seleccionar nación...</option>
+                <div className="cp-fl">
+                  <label className="cp-lb">Nación</label>
+                  <select className="cp-in" value={nacionId} onChange={e => setNacionId(e.target.value)}>
+                    <option value="">Seleccionar...</option>
                     {naciones.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
                   </select>
                 </div>
                 {hasEquipos && (
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Escuadrón</label>
-                    <div className="space-y-1.5">
-                      {equipos.map(eq => (
-                        <button key={eq.id} onClick={() => setEquipoId(eq.id)}
-                          className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          <div className="flex items-center gap-2">
-                            <span className="w-3 h-3 rounded-full" style={{ background: eq.color }} />
-                            <span className="font-medium">{eq.nombre}</span>
-                          </div>
-                          {(eq.lider || eq.consejero) && (
-                            <div className="text-[10px] mt-0.5 ml-5" style={{ color: 'var(--color-text-muted)' }}>
-                              {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}
-                            </div>
-                          )}
+                  <div className="cp-fl">
+                    <label className="cp-lb">Escuadrón</label>
+                    {(() => {
+                      const gs = Array.from(new Set(equipos.map(e => e.genero).filter(Boolean)));
+                      if (gs.length > 0) return gs.map(g => (
+                        <div key={g}>
+                          <div className="cp-gd">{g === 'mujeres' ? '♀ Mujeres' : '♂ Hombres'}</div>
+                          {equipos.filter(eq => eq.genero === g).map(eq => (
+                            <button key={eq.id} className={`cp-eq ${equipoId === eq.id ? 'sel' : ''}`} onClick={() => setEquipoId(eq.id)}>
+                              <div className="cp-eq-d" style={{ background: eq.color }} />
+                              <div className="cp-eq-i"><div className="cp-eq-n">{eq.nombre}</div>
+                                {(eq.lider || eq.consejero) && <div className="cp-eq-s">{eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}</div>}
+                              </div>
+                              <div className="cp-eq-c">{equipoId === eq.id ? '✓' : ''}</div>
+                            </button>
+                          ))}
+                        </div>
+                      ));
+                      return equipos.map(eq => (
+                        <button key={eq.id} className={`cp-eq ${equipoId === eq.id ? 'sel' : ''}`} onClick={() => setEquipoId(eq.id)}>
+                          <div className="cp-eq-d" style={{ background: eq.color }} /><div className="cp-eq-i"><div className="cp-eq-n">{eq.nombre}</div></div>
+                          <div className="cp-eq-c">{equipoId === eq.id ? '✓' : ''}</div>
                         </button>
-                      ))}
-                    </div>
+                      ));
+                    })()}
                   </div>
                 )}
-                <div>
-                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
-                  <div className="flex items-center gap-3">
-                    <button onClick={() => setNumBoletos(Math.max(1, numBoletos - 1))}
-                      className="w-10 h-10 rounded-lg border text-lg font-bold flex items-center justify-center"
-                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>−</button>
-                    <span className="text-2xl font-bold w-10 text-center" style={{ fontFamily: 'var(--font-display)' }}>{numBoletos}</span>
-                    <button onClick={() => setNumBoletos(numBoletos + 1)}
-                      className="w-10 h-10 rounded-lg border text-lg font-bold flex items-center justify-center"
-                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}>+</button>
-                    <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                      Total: <strong style={{ color: 'var(--color-text)' }}>${total.toLocaleString()}</strong>
-                    </span>
+                <div className="cp-fl">
+                  <label className="cp-lb">Boletos</label>
+                  <div className="cp-qty">
+                    <button className="cp-qb" onClick={() => setNumBoletos(Math.max(1, numBoletos - 1))}>−</button>
+                    <div className="cp-qn">{numBoletos}</div>
+                    <button className="cp-qb" onClick={() => setNumBoletos(numBoletos + 1)}>+</button>
+                    <div className="cp-qt">Total: <b>${total.toLocaleString()}</b></div>
                   </div>
                 </div>
               </div>
-            </div>
 
-            {error && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}
-
-            <button onClick={handleDatosNext}
-              className="w-full py-3 rounded-lg font-bold text-white transition-all"
-              style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
-              {selectedEvento.tiene_asientos ? 'Seleccionar Asientos' : 'Ir a Pagar'}
-            </button>
-          </div>
-        )}
-
-        {/* Step 2: Asientos */}
-        {step === 'asientos' && selectedEvento?.tiene_asientos && (
-          <div className="space-y-4">
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  Selecciona {numBoletos} asiento{numBoletos > 1 ? 's' : ''}
-                </h2>
-                <div className="flex gap-4 text-xs">
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Tu selección</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
-                </div>
-              </div>
-              {selectedSeats.length > 0 && (
-                <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
-                  {selectedSeats.length}/{numBoletos} seleccionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.map(id => {
-                    const seat = asientos.find(a => a.id === id);
-                    return <span key={id} className="px-2 py-0.5 rounded text-xs font-bold text-white ml-1" style={{ background: 'var(--color-accent)' }}>{seat ? `${seat.fila}${seat.columna}` : id}</span>;
-                  })}
-                </div>
-              )}
-              <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={handleSeatClick} />
-            </div>
-
-            {error && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}
-
-            <div className="flex gap-3">
-              <button onClick={() => { setStep('datos'); setError(''); }}
-                className="flex-1 py-3 rounded-lg font-bold border"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>← Volver</button>
-              <button onClick={handleAsientosNext}
-                className="flex-1 py-3 rounded-lg font-bold text-white"
-                style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
-                Ir a Pagar
+              {error && <div className="cp-err">{error}</div>}
+              <button className="cp-bp cp-a cp-a2" onClick={nextFromDatos}>
+                {selectedEvento.tiene_asientos ? 'Seleccionar asientos →' : 'Continuar al pago →'}
               </button>
             </div>
-          </div>
-        )}
+          )}
 
-        {/* Step 3: Resumen + Pago con MP integrado */}
-        {step === 'pago' && selectedEvento && (
-          <div className="space-y-4">
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <h2 className="text-lg font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Resumen de tu compra</h2>
-              <div className="space-y-3 text-sm">
-                <div className="flex justify-between py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Evento</span>
-                  <span className="font-medium">{selectedEvento.nombre}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Nombre</span>
-                  <span className="font-medium">{nombre}</span>
-                </div>
-                <div className="flex justify-between py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Correo</span>
-                  <span className="font-medium">{correo}</span>
-                </div>
-                {selectedSeats.length > 0 && (
-                  <div className="flex justify-between py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                    <span style={{ color: 'var(--color-text-muted)' }}>Asientos</span>
-                    <span className="font-medium flex gap-1">{selectedSeats.map(id => {
-                      const seat = asientos.find(a => a.id === id);
-                      return <span key={id} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{seat ? `${seat.fila}${seat.columna}` : id}</span>;
-                    })}</span>
+          {/* ASIENTOS */}
+          {step === 'asientos' && selectedEvento?.tiene_asientos && (
+            <div>
+              <div className="cp-cd cp-a">
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <div className="cp-ct" style={{ marginBottom: 0 }}>Elige tu lugar</div>
+                  <div style={{ display: 'flex', gap: 10, fontSize: 10 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(16,185,129,.4)' }}></span>Libre</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: '#00e5ff' }}></span>Tuyo</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}><span style={{ width: 8, height: 8, borderRadius: 2, background: 'rgba(0,229,255,.2)' }}></span>Ocupado</span>
                   </div>
-                )}
-                <div className="flex justify-between py-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                  <span style={{ color: 'var(--color-text-muted)' }}>Boletos</span>
-                  <span className="font-medium">{numBoletos} × ${selectedEvento.precio_default.toLocaleString()}</span>
                 </div>
-                <div className="flex justify-between py-3">
-                  <span className="text-lg font-bold">Total</span>
-                  <span className="text-2xl font-bold" style={{ color: 'var(--color-accent)' }}>${total.toLocaleString()}</span>
+                <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={handleSeatClick} />
+              </div>
+              {error && <div className="cp-err">{error}</div>}
+              <div className="cp-sbar">
+                <div className="cp-sbar-in">
+                  <div>{selectedSeats.length > 0 ? (
+                    <div className="cp-sbar-seats">{selectedSeats.map(id => <span key={id} className="cp-sb">{seatLabel(id)}</span>)}</div>
+                  ) : <span style={{ fontSize: 12, color: 'rgba(255,255,255,.25)' }}>Toca un asiento</span>}</div>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button className="cp-bk" onClick={() => { setStep('datos'); setError(''); }}>← Atrás</button>
+                    <button className="cp-bp" style={{ width: 'auto', padding: '10px 20px', fontSize: 13 }} onClick={nextFromAsientos}>Pagar →</button>
+                  </div>
                 </div>
               </div>
             </div>
+          )}
 
-            {/* MP Wallet Button - renders inline */}
-            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-              <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Método de pago</h3>
-              {processing && (
-                <div className="text-center py-4" style={{ color: 'var(--color-text-muted)' }}>
-                  Preparando opciones de pago...
+          {/* PAGO */}
+          {step === 'pago' && selectedEvento && (
+            <div>
+              <div className="cp-cd cp-a">
+                <div className="cp-ct">Resumen</div>
+                <div className="cp-sr"><span className="cp-sl">Evento</span><span className="cp-sv">{selectedEvento.nombre}</span></div>
+                <div className="cp-sr"><span className="cp-sl">Nombre</span><span className="cp-sv">{nombre}</span></div>
+                <div className="cp-sr"><span className="cp-sl">Correo</span><span className="cp-sv" style={{ fontSize: 12 }}>{correo}</span></div>
+                {selectedSeats.length > 0 && (
+                  <div className="cp-sr"><span className="cp-sl">Asientos</span><span className="cp-sv" style={{ display: 'flex', gap: 4 }}>
+                    {selectedSeats.map(id => <span key={id} className="cp-sb">{seatLabel(id)}</span>)}
+                  </span></div>
+                )}
+                <div className="cp-sr"><span className="cp-sl">Boletos</span><span className="cp-sv">{numBoletos} × ${selectedEvento.precio_default.toLocaleString()}</span></div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingTop: 14, marginTop: 6, borderTop: '1px solid rgba(255,255,255,.05)' }}>
+                  <span style={{ fontSize: 15, fontWeight: 600 }}>Total</span>
+                  <span className="cp-stot">${total.toLocaleString()}</span>
                 </div>
-              )}
-              <div id="wallet_container" ref={walletContainerRef}></div>
+              </div>
+              <div className="cp-cd cp-a cp-a1">
+                <div className="cp-ct">Pagar</div>
+                {processing && <div style={{ textAlign: 'center', padding: 16, color: 'rgba(255,255,255,.25)', fontSize: 13 }}>Preparando...</div>}
+                <div id="wallet_container" ref={walletRef}></div>
+              </div>
+              {error && <div className="cp-err">{error}</div>}
+              <button className="cp-bs cp-a cp-a2" onClick={() => { setStep(selectedEvento.tiene_asientos ? 'asientos' : 'datos'); setError(''); }}>← Volver</button>
             </div>
-
-            {error && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}
-
-            <button onClick={() => { setStep(selectedEvento.tiene_asientos ? 'asientos' : 'datos'); setError(''); }}
-              className="w-full py-3 rounded-lg font-bold border"
-              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>← Volver</button>
-          </div>
-        )}
-      </main>
-    </div>
+          )}
+        </main>
+      </div>
+    </>
   );
 }

@@ -271,17 +271,10 @@ export default function ComprarPage() {
                   <input type="email" value={correo} onChange={e => setCorreo(e.target.value)} placeholder="correo@ejemplo.com (aquí recibes tu comprobante)"
                     className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
-                    <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>WhatsApp</label>
-                    <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="10 dígitos"
-                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                  </div>
+                <div>
+                  <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono / WhatsApp</label>
+                  <input type="tel" value={telefono} onChange={e => { setTelefono(e.target.value); setWhatsapp(e.target.value); }} placeholder="10 dígitos"
+                    className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                 </div>
                 {hasEquipos && equipos.some(e => e.genero) && (
                   <div>

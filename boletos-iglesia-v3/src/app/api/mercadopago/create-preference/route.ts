@@ -2,10 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Preference } from 'mercadopago';
 import { createServerClient } from '@/lib/supabase';
 
-const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN! });
-
 export async function POST(request: NextRequest) {
   try {
+    const accessToken = (process.env.MP_ACCESS_TOKEN || '').trim();
+    if (!accessToken) {
+      return NextResponse.json({ error: 'Mercado Pago no configurado' }, { status: 500 });
+    }
+
+    const client = new MercadoPagoConfig({ accessToken });
     const body = await request.json();
     const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId, asientoIds, cantidad } = body;
 
@@ -55,10 +59,10 @@ export async function POST(request: NextRequest) {
     let seatDesc = '';
     if (asientoIds && asientoIds.length > 0) {
       const { data: seats } = await supabase.from('asientos').select('fila, columna').in('id', asientoIds);
-      if (seats) seatDesc = ' — Asientos: ' + seats.map(s => `${s.fila}${s.columna}`).join(', ');
+      if (seats) seatDesc = ' — Asientos: ' + seats.map((s: any) => `${s.fila}${s.columna}`).join(', ');
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://boletos.rnmexico.org';
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
 
     // Create MP preference
     const preference = new Preference(client);
@@ -84,9 +88,6 @@ export async function POST(request: NextRequest) {
         auto_return: 'approved',
         notification_url: `${appUrl}/api/mercadopago/webhook`,
         external_reference: registroIds.join(','),
-        expires: true,
-        expiration_date_from: new Date().toISOString(),
-        expiration_date_to: new Date(Date.now() + 30 * 60 * 1000).toISOString(), // 30 min
       },
     });
 

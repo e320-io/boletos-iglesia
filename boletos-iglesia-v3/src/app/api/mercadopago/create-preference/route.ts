@@ -25,33 +25,12 @@ export async function POST(request: NextRequest) {
 
     if (total <= 0) return NextResponse.json({ error: 'Este evento es gratuito' }, { status: 400 });
 
-    // Create pending registros
-    const registroIds: string[] = [];
-    for (let i = 0; i < numBoletos; i++) {
-      const regNombre = i === 0 ? nombre : `${nombre} - Invitado ${i}`;
-      const { data: reg, error: regErr } = await supabase.from('registros').insert({
-        nombre: regNombre,
-        telefono: i === 0 ? telefono || null : null,
-        correo: i === 0 ? correo || null : null,
-        whatsapp: i === 0 ? whatsapp || null : null,
-        edad: i === 0 && edad ? parseInt(edad) : null,
-        nacion_id: nacionId || null,
-        equipo_id: equipoId || null,
-        evento_id: eventoId,
-        status: 'pendiente',
-        monto_total: precioUnitario,
-        monto_pagado: 0,
-        precio_boleto: precioUnitario,
-        tipo: 'general',
-        notas: numBoletos > 1 ? `Compra en línea - ${nombre} (${numBoletos} boletos)` : 'Compra en línea',
-      }).select().single();
-
-      if (regErr) throw regErr;
-      registroIds.push(reg.id);
-
-      // Reserve seats if provided
-      if (asientoIds && asientoIds[i]) {
-        await supabase.from('asientos').update({ estado: 'reservado', registro_id: reg.id }).eq('id', asientoIds[i]);
+    // Validate seats are still available (don't reserve them yet)
+    if (asientoIds && asientoIds.length > 0) {
+      const { data: seats } = await supabase.from('asientos').select('id, estado').in('id', asientoIds);
+      const unavailable = (seats || []).filter(s => s.estado !== 'disponible');
+      if (unavailable.length > 0) {
+        return NextResponse.json({ error: 'Uno o más asientos ya no están disponibles. Selecciona otros.' }, { status: 409 });
       }
     }
 
@@ -63,6 +42,13 @@ export async function POST(request: NextRequest) {
     }
 
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
+
+    // Pack buyer data into external_reference (no DB writes yet)
+    const buyerData = JSON.stringify({
+      eventoId, nombre, telefono, correo, whatsapp, edad,
+      nacionId, equipoId, asientoIds, cantidad: numBoletos,
+    });
+    const encodedData = Buffer.from(buyerData).toString('base64');
 
     // Create MP preference
     const preference = new Preference(client);
@@ -81,20 +67,19 @@ export async function POST(request: NextRequest) {
           phone: telefono ? { number: telefono } : undefined,
         },
         back_urls: {
-          success: `${appUrl}/comprar/resultado?status=success&registros=${registroIds.join(',')}`,
-          failure: `${appUrl}/comprar/resultado?status=failure&registros=${registroIds.join(',')}`,
-          pending: `${appUrl}/comprar/resultado?status=pending&registros=${registroIds.join(',')}`,
+          success: `${appUrl}/comprar/resultado?status=success`,
+          failure: `${appUrl}/comprar/resultado?status=failure`,
+          pending: `${appUrl}/comprar/resultado?status=pending`,
         },
         auto_return: 'approved',
         notification_url: `${appUrl}/api/mercadopago/webhook`,
-        external_reference: registroIds.join(','),
+        external_reference: encodedData,
       },
     });
 
     return NextResponse.json({
       preferenceId: result.id,
       initPoint: result.init_point,
-      registroIds,
     });
   } catch (error: any) {
     console.error('MP preference error:', error);

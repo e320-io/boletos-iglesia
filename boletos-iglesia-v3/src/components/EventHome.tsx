@@ -552,20 +552,12 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
                       </select>
                     </div>
                   )}
-                  {/* WhatsApp */}
+                  {/* Teléfono / WhatsApp */}
                   <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>WhatsApp</label>
-                    <input type="tel" value={whatsapp} onChange={e => setWhatsapp(e.target.value)} placeholder="10 dígitos"
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono / WhatsApp</label>
+                    <input type="tel" value={telefono} onChange={e => { setTelefono(e.target.value); setWhatsapp(e.target.value); }} placeholder="10 dígitos"
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
-                  {/* Teléfono — only for events without equipos */}
-                  {!hasEquipos && (
-                    <div>
-                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Teléfono</label>
-                      <input type="tel" value={telefono} onChange={e => setTelefono(e.target.value)} placeholder="10 dígitos"
-                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                    </div>
-                  )}
                   {/* Correo */}
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Correo</label>

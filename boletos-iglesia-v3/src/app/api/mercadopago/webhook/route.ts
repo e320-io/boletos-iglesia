@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { createServerClient } from '@/lib/supabase';
 
-const client = new MercadoPagoConfig({ accessToken: process.env.MP_ACCESS_TOKEN! });
+const client = new MercadoPagoConfig({ accessToken: (process.env.MP_ACCESS_TOKEN || '').trim() });
 
 export async function POST(request: NextRequest) {
   try {

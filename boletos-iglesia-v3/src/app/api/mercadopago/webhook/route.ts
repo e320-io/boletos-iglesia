@@ -2,95 +2,116 @@ import { NextRequest, NextResponse } from 'next/server';
 import { MercadoPagoConfig, Payment } from 'mercadopago';
 import { createServerClient } from '@/lib/supabase';
 
-const client = new MercadoPagoConfig({ accessToken: (process.env.MP_ACCESS_TOKEN || '').trim() });
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
-    // MP sends different notification types
     if (body.type === 'payment' || body.action === 'payment.created' || body.action === 'payment.updated') {
       const paymentId = body.data?.id || body.id;
       if (!paymentId) return NextResponse.json({ ok: true });
 
-      // Fetch payment details from MP
+      const accessToken = (process.env.MP_ACCESS_TOKEN || '').trim();
+      const client = new MercadoPagoConfig({ accessToken });
       const payment = new Payment(client);
       const paymentData = await payment.get({ id: paymentId });
 
       if (!paymentData) return NextResponse.json({ ok: true });
 
-      const status = paymentData.status; // approved, pending, rejected, etc.
+      const status = paymentData.status;
       const externalRef = paymentData.external_reference;
 
       if (!externalRef) return NextResponse.json({ ok: true });
 
-      const registroIds = externalRef.split(',');
+      // Only create registros when payment is APPROVED
+      if (status !== 'approved') return NextResponse.json({ ok: true });
+
+      // Decode buyer data from external_reference
+      let buyerData: any;
+      try {
+        buyerData = JSON.parse(Buffer.from(externalRef, 'base64').toString('utf-8'));
+      } catch {
+        // Legacy format (comma-separated IDs) — skip
+        return NextResponse.json({ ok: true });
+      }
+
+      const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId, asientoIds, cantidad } = buyerData;
+      const numBoletos = cantidad || 1;
+      const total = paymentData.transaction_amount || 0;
+      const perBoleto = Math.floor(total / numBoletos);
+      const remainder = total - (perBoleto * numBoletos);
+
       const supabase = createServerClient();
+      const registroIds: string[] = [];
 
-      if (status === 'approved') {
-        const total = paymentData.transaction_amount || 0;
-        const numBoletos = registroIds.length;
-        const perBoleto = Math.floor(total / numBoletos);
-        const remainder = total - (perBoleto * numBoletos);
+      for (let i = 0; i < numBoletos; i++) {
+        const regNombre = i === 0 ? nombre : `${nombre} - Invitado ${i}`;
+        const pagoBoleto = i === 0 ? perBoleto + remainder : perBoleto;
 
-        for (let i = 0; i < registroIds.length; i++) {
-          const regId = registroIds[i];
-          const pagoBoleto = i === 0 ? perBoleto + remainder : perBoleto;
+        const { data: reg, error: regErr } = await supabase.from('registros').insert({
+          nombre: regNombre,
+          telefono: i === 0 ? telefono || null : null,
+          correo: i === 0 ? correo || null : null,
+          whatsapp: i === 0 ? whatsapp || null : null,
+          edad: i === 0 && edad ? parseInt(edad) : null,
+          nacion_id: nacionId || null,
+          equipo_id: equipoId || null,
+          evento_id: eventoId,
+          status: 'liquidado',
+          monto_total: perBoleto + (i === 0 ? remainder : 0),
+          monto_pagado: pagoBoleto,
+          precio_boleto: perBoleto + (i === 0 ? remainder : 0),
+          tipo: 'general',
+          notas: numBoletos > 1 ? `Compra en línea - ${nombre} (${numBoletos} boletos)` : 'Compra en línea',
+        }).select().single();
 
-          // Update registro to liquidado
-          await supabase.from('registros').update({
-            monto_pagado: pagoBoleto,
-            status: 'liquidado',
-          }).eq('id', regId);
-
-          // Record payment
-          await supabase.from('pagos').insert({
-            registro_id: regId,
-            monto: pagoBoleto,
-            metodo_pago: 'tarjeta',
-            referencia: `MP-${paymentId}`,
-          });
-
-          // Change reserved seats to occupied
-          await supabase.from('asientos').update({ estado: 'ocupado' })
-            .eq('registro_id', regId).eq('estado', 'reservado');
+        if (regErr) {
+          console.error('Error creating registro:', regErr);
+          continue;
         }
+        registroIds.push(reg.id);
 
-        // Send confirmation email
-        const { data: firstReg } = await supabase.from('registros').select('correo').eq('id', registroIds[0]).single();
-        if (firstReg?.correo) {
-          try {
-            const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://boletos.rnmexico.org';
-            await fetch(`${appUrl}/api/send-email`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                registroId: registroIds[0],
-                grupoIds: registroIds.length > 1 ? registroIds : undefined,
-              }),
-            });
-          } catch {}
-        }
-
-        // Log activity
-        await supabase.from('activity_log').insert({
-          usuario_id: null,
-          usuario_nombre: 'Compra en línea',
-          accion: 'pago_registrado',
-          detalle: `MP #${paymentId} — $${total.toLocaleString()} — ${registroIds.length} boleto(s)`,
-          evento_id: null,
-          registro_id: registroIds[0],
+        // Record payment
+        await supabase.from('pagos').insert({
+          registro_id: reg.id,
+          monto: pagoBoleto,
+          metodo_pago: 'tarjeta',
+          referencia: `MP-${paymentId}`,
         });
 
-      } else if (status === 'rejected' || status === 'cancelled') {
-        // Release seats and delete pending registros
-        for (const regId of registroIds) {
-          await supabase.from('asientos').update({ estado: 'disponible', registro_id: null })
-            .eq('registro_id', regId);
-          await supabase.from('registros').delete().eq('id', regId).eq('status', 'pendiente');
+        // Assign seat if provided and still available
+        if (asientoIds && asientoIds[i]) {
+          const { data: seat } = await supabase.from('asientos')
+            .select('estado').eq('id', asientoIds[i]).single();
+          if (seat && seat.estado === 'disponible') {
+            await supabase.from('asientos').update({ estado: 'ocupado', registro_id: reg.id }).eq('id', asientoIds[i]);
+          }
         }
       }
-      // For 'pending' status, keep registros as-is (waiting for payment at OXXO etc.)
+
+      // Send confirmation email
+      if (correo && registroIds.length > 0) {
+        try {
+          const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();
+          await fetch(`${appUrl}/api/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              registroId: registroIds[0],
+              grupoIds: registroIds.length > 1 ? registroIds : undefined,
+            }),
+          });
+        } catch {}
+      }
+
+      // Log activity
+      await supabase.from('activity_log').insert({
+        usuario_id: null,
+        usuario_nombre: 'Compra en línea',
+        accion: 'pago_registrado',
+        detalle: `MP #${paymentId} — $${total.toLocaleString()} — ${numBoletos} boleto(s) — ${nombre}`,
+        evento_id: eventoId,
+        registro_id: registroIds[0] || null,
+      });
     }
 
     return NextResponse.json({ ok: true });

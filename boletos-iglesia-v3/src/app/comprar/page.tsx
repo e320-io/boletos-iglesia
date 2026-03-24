@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Asiento, Nacion } from '@/types';
 import SeatMap from '@/components/SeatMap';
+import Script from 'next/script';
 
 interface Evento {
   id: string;
@@ -17,6 +18,12 @@ interface Evento {
   usa_equipos: boolean;
 }
 
+declare global {
+  interface Window {
+    MercadoPago: any;
+  }
+}
+
 export default function ComprarPage() {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
@@ -26,6 +33,7 @@ export default function ComprarPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
+  const [mpReady, setMpReady] = useState(false);
 
   // Form
   const [nombre, setNombre] = useState('');
@@ -40,6 +48,9 @@ export default function ComprarPage() {
 
   // Step
   const [step, setStep] = useState<'eventos' | 'datos' | 'asientos' | 'pago'>('eventos');
+
+  // MP widget container
+  const walletContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     supabase.from('eventos').select('*').eq('activo', true).eq('es_gratuito', false).order('fecha')
@@ -93,8 +104,9 @@ export default function ComprarPage() {
     setStep('pago');
   };
 
-  const handlePagar = async () => {
-    if (!selectedEvento) return;
+  // Create preference and render MP wallet button
+  const initMercadoPago = useCallback(async () => {
+    if (!selectedEvento || !mpReady) return;
     setProcessing(true);
     setError('');
 
@@ -119,13 +131,34 @@ export default function ComprarPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
-      // Redirect to Mercado Pago
-      window.location.href = data.initPoint;
+      // Clear previous widget
+      if (walletContainerRef.current) {
+        walletContainerRef.current.innerHTML = '';
+      }
+
+      // Initialize MP Bricks
+      const mp = new window.MercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY, { locale: 'es-MX' });
+      const bricksBuilder = mp.bricks();
+
+      await bricksBuilder.create('wallet', 'wallet_container', {
+        initialization: {
+          preferenceId: data.preferenceId,
+        },
+      });
+
+      setProcessing(false);
     } catch (err: any) {
-      setError(err.message || 'Error al procesar el pago');
+      setError(err.message || 'Error al iniciar el pago');
       setProcessing(false);
     }
-  };
+  }, [selectedEvento, mpReady, nombre, correo, telefono, whatsapp, edad, nacionId, equipoId, selectedSeats, numBoletos]);
+
+  // Init MP when entering pago step
+  useEffect(() => {
+    if (step === 'pago' && mpReady) {
+      initMercadoPago();
+    }
+  }, [step, mpReady, initMercadoPago]);
 
   const total = (selectedEvento?.precio_default || 0) * numBoletos;
   const hasEquipos = equipos.length > 0;
@@ -140,6 +173,12 @@ export default function ComprarPage() {
 
   return (
     <div className="min-h-screen" style={{ background: 'var(--color-bg)' }}>
+      {/* Load MP SDK */}
+      <Script
+        src="https://sdk.mercadopago.com/js/v2"
+        onLoad={() => setMpReady(true)}
+      />
+
       {/* Header */}
       <header className="border-b" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
         <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -165,7 +204,7 @@ export default function ComprarPage() {
               const isActive = i <= currentIdx;
               return (
                 <div key={label} className="flex items-center gap-2 flex-1">
-                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold ${isActive ? 'text-white' : ''}`}
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold`}
                     style={{ background: isActive ? 'var(--color-accent)' : 'var(--color-border)', color: isActive ? 'white' : 'var(--color-text-muted)' }}>
                     {i + 1}
                   </div>
@@ -251,7 +290,6 @@ export default function ComprarPage() {
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
                 )}
-                {/* Nación */}
                 <div>
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nación</label>
                   <select value={nacionId} onChange={e => setNacionId(e.target.value)}
@@ -260,7 +298,6 @@ export default function ComprarPage() {
                     {naciones.map(n => <option key={n.id} value={n.id}>{n.nombre}</option>)}
                   </select>
                 </div>
-                {/* Equipos */}
                 {hasEquipos && (
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Escuadrón</label>
@@ -283,7 +320,6 @@ export default function ComprarPage() {
                     </div>
                   </div>
                 )}
-                {/* Num boletos */}
                 <div>
                   <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Número de boletos</label>
                   <div className="flex items-center gap-3">
@@ -352,7 +388,7 @@ export default function ComprarPage() {
           </div>
         )}
 
-        {/* Step 3: Resumen + Pago */}
+        {/* Step 3: Resumen + Pago con MP integrado */}
         {step === 'pago' && selectedEvento && (
           <div className="space-y-4">
             <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -390,23 +426,22 @@ export default function ComprarPage() {
               </div>
             </div>
 
-            <div className="rounded-lg p-4 text-xs text-center" style={{ background: 'rgba(0,188,212,0.05)', border: '1px solid rgba(0,188,212,0.15)', color: 'var(--color-text-muted)' }}>
-              Al hacer clic en "Pagar" serás redirigido a Mercado Pago para completar tu compra de forma segura.
-              Tu comprobante llegará al correo que proporcionaste.
+            {/* MP Wallet Button - renders inline */}
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Método de pago</h3>
+              {processing && (
+                <div className="text-center py-4" style={{ color: 'var(--color-text-muted)' }}>
+                  Preparando opciones de pago...
+                </div>
+              )}
+              <div id="wallet_container" ref={walletContainerRef}></div>
             </div>
 
             {error && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{error}</div>}
 
-            <div className="flex gap-3">
-              <button onClick={() => { setStep(selectedEvento.tiene_asientos ? 'asientos' : 'datos'); setError(''); }}
-                className="flex-1 py-3 rounded-lg font-bold border"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>← Volver</button>
-              <button onClick={handlePagar} disabled={processing}
-                className="flex-1 py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40"
-                style={{ background: 'linear-gradient(135deg, #00bcd4, #0097a7)', fontFamily: 'var(--font-display)' }}>
-                {processing ? 'Procesando...' : `Pagar $${total.toLocaleString()}`}
-              </button>
-            </div>
+            <button onClick={() => { setStep(selectedEvento.tiene_asientos ? 'asientos' : 'datos'); setError(''); }}
+              className="w-full py-3 rounded-lg font-bold border"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>← Volver</button>
           </div>
         )}
       </main>

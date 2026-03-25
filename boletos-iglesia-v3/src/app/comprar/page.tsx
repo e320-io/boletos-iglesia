@@ -12,7 +12,10 @@ interface Evento {
 }
 declare global { interface Window { MercadoPago: any; } }
 
-const EVENT_IMAGES: Record<string, string> = { 'legacy-women': '/flyer-legacy-women.jpg' };
+const EVENT_IMAGES: Record<string, string> = {
+  'legacy-women': '/flyer-legacy-women.jpg',
+  'legacy-varones': '/flyer-legacy-varones.jpg',
+};
 
 export default function ComprarPage() {
   const [eventos, setEventos] = useState<Evento[]>([]);
@@ -37,7 +40,7 @@ export default function ComprarPage() {
   const walletRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    supabase.from('eventos').select('*').eq('activo', true).eq('es_gratuito', false).order('fecha')
+    supabase.from('eventos').select('*').eq('activo', true).eq('compra_online', true).order('fecha')
       .then(({ data }) => { if (data) setEventos(data as Evento[]); setLoading(false); });
   }, []);
 
@@ -110,7 +113,7 @@ export default function ComprarPage() {
 
       /* ---- PANTALLA DATOS/PAGO (light bottom sheet) ---- */
       .bp-detail{min-height:100dvh;display:flex;flex-direction:column}
-      .bp-detail-hero{position:relative;flex-shrink:0;overflow:hidden}
+      .bp-detail-hero{position:relative;flex-shrink:0;overflow:hidden;padding-bottom:24px;background:#e8e0d8}
       .bp-detail-hero img{width:100%;display:block}
       .bp-detail-hero-grad{position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(transparent,rgba(0,0,0,.4))}
       .bp-detail-back{position:absolute;top:16px;left:16px;z-index:2;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.4);backdrop-filter:blur(10px);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px}

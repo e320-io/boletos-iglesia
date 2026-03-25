@@ -110,9 +110,9 @@ export default function ComprarPage() {
 
       /* ---- PANTALLA DATOS/PAGO (light bottom sheet) ---- */
       .bp-detail{min-height:100dvh;display:flex;flex-direction:column}
-      .bp-detail-hero{position:relative;height:280px;flex-shrink:0;overflow:hidden}
-      .bp-detail-hero img{width:100%;height:100%;object-fit:cover}
-      .bp-detail-hero-grad{position:absolute;inset:0;background:linear-gradient(transparent 40%,rgba(0,0,0,.7))}
+      .bp-detail-hero{position:relative;flex-shrink:0;overflow:hidden}
+      .bp-detail-hero img{width:100%;display:block}
+      .bp-detail-hero-grad{position:absolute;bottom:0;left:0;right:0;height:80px;background:linear-gradient(transparent,rgba(0,0,0,.4))}
       .bp-detail-back{position:absolute;top:16px;left:16px;z-index:2;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.4);backdrop-filter:blur(10px);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px}
       .bp-detail-hero-noimg{height:120px;background:linear-gradient(135deg,#0c1120,#1a2744);display:flex;align-items:flex-end;padding:20px;position:relative}
 
@@ -147,11 +147,11 @@ export default function ComprarPage() {
       select.bp-finput{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;background-color:#fff}
 
       /* Quantity */
-      .bp-qty{display:flex;align-items:center;gap:12px}
-      .bp-qbtn{width:38px;height:38px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#111;font-size:18px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s}
-      .bp-qbtn:active{background:#f0feff;border-color:#00e5ff}
-      .bp-qnum{font-size:26px;font-weight:800;color:#111;min-width:32px;text-align:center}
-      .bp-qtot{font-size:13px;color:#888}.bp-qtot b{color:#00bcd4;font-weight:700}
+      .bp-qty{display:flex !important;flex-direction:row !important;align-items:center !important;gap:14px;background:#fff;border:1.5px solid #e5e7eb;border-radius:14px;padding:12px 16px}
+      .bp-qbtn{width:42px;height:42px;border-radius:12px;border:1.5px solid #e5e7eb;background:#f8f9fb;color:#111 !important;font-size:20px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:.15s;-webkit-appearance:none}
+      .bp-qbtn:active{background:#e0f7fa;border-color:#00bcd4}
+      .bp-qnum{font-size:32px;font-weight:800;color:#111 !important;min-width:40px;text-align:center;flex-shrink:0}
+      .bp-qtot{font-size:14px;color:#666 !important;margin-left:auto;white-space:nowrap}.bp-qtot b{color:#00bcd4 !important;font-weight:800;font-size:16px}
 
       /* Equipo on white */
       .bp-eqbtn{width:100%;text-align:left;padding:10px 12px;border-radius:10px;margin-bottom:6px;background:#fff;border:1.5px solid #e5e7eb;color:#333;cursor:pointer;transition:.15s;display:flex;align-items:center;gap:10px;font-family:'Plus Jakarta Sans',sans-serif}
@@ -165,11 +165,11 @@ export default function ComprarPage() {
       .bp-gendiv{font-size:10px;font-weight:700;color:#aaa;letter-spacing:1.5px;text-transform:uppercase;margin:12px 0 6px}
 
       /* Primary button */
-      .bp-btn{width:100%;padding:14px;border-radius:14px;font-size:15px;font-weight:700;font-family:'Plus Jakarta Sans',sans-serif;border:none;cursor:pointer;transition:.15s;background:#111;color:#fff}
-      .bp-btn:active{transform:scale(.98);opacity:.9}
+      .bp-btn{width:100%;padding:16px;border-radius:16px;font-size:16px;font-weight:800;font-family:'Plus Jakarta Sans',sans-serif;border:none;cursor:pointer;transition:.2s;background:#0c1120;color:#fff;letter-spacing:.3px;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+      .bp-btn:active{transform:scale(.97);opacity:.9}
       .bp-btn:disabled{opacity:.35;cursor:not-allowed;transform:none}
-      .bp-btn-accent{background:linear-gradient(135deg,#00e5ff,#00b8d4);color:#0c1120}
-      .bp-btn-outline{background:transparent;border:1.5px solid #e5e7eb;color:#888}
+      .bp-btn-accent{background:linear-gradient(135deg,#00e5ff,#00b8d4);color:#0c1120;box-shadow:0 4px 20px rgba(0,229,255,.25)}
+      .bp-btn-outline{background:#fff;border:1.5px solid #e5e7eb;color:#888 !important;box-shadow:none}
 
       /* Summary */
       .bp-sumrow{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #eee;font-size:13px;color:#666}

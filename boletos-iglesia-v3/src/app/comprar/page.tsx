@@ -335,16 +335,19 @@ export default function ComprarPage() {
                 )}
                 <div className="bp-field">
                   <label className="bp-flabel">Boletos</label>
-                  <div className="bp-qty">
-                    <button className="bp-qbtn" onClick={()=>setNumBoletos(Math.max(1,numBoletos-1))}>−</button>
-                    <div className="bp-qnum">{numBoletos}</div>
-                    <button className="bp-qbtn" onClick={()=>setNumBoletos(numBoletos+1)}>+</button>
-                    <div className="bp-qtot">Total: <b>${total.toLocaleString()}</b></div>
+                  <div style={{display:'flex',flexDirection:'row',alignItems:'center',gap:14,background:'#fff',border:'1.5px solid #e5e7eb',borderRadius:14,padding:'12px 16px'}}>
+                    <button onClick={()=>setNumBoletos(Math.max(1,numBoletos-1))}
+                      style={{width:44,height:44,borderRadius:12,border:'1.5px solid #ddd',background:'#f5f5f5',color:'#111',fontSize:22,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1}}>−</button>
+                    <span style={{fontSize:34,fontWeight:800,color:'#111',minWidth:40,textAlign:'center',flexShrink:0,lineHeight:1}}>{numBoletos}</span>
+                    <button onClick={()=>setNumBoletos(numBoletos+1)}
+                      style={{width:44,height:44,borderRadius:12,border:'1.5px solid #ddd',background:'#f5f5f5',color:'#111',fontSize:22,fontWeight:700,cursor:'pointer',display:'inline-flex',alignItems:'center',justifyContent:'center',flexShrink:0,lineHeight:1}}>+</button>
+                    <span style={{fontSize:14,color:'#888',marginLeft:'auto',whiteSpace:'nowrap'}}>Total: <b style={{color:'#00bcd4',fontWeight:800,fontSize:17}}>${total.toLocaleString()}</b></span>
                   </div>
                 </div>
 
                 {error && <div className="bp-err">{error}</div>}
-                <button className="bp-btn" onClick={goAsientos} style={{marginTop:8}}>
+                <button onClick={goAsientos}
+                  style={{width:'100%',padding:16,borderRadius:16,fontSize:16,fontWeight:800,border:'none',cursor:'pointer',background:'#0c1120',color:'#fff',marginTop:12,boxShadow:'0 4px 16px rgba(0,0,0,.15)',letterSpacing:'.3px'}}>
                   {ev.tiene_asientos ? 'Elegir asientos →' : `Comprar boleto — $${total.toLocaleString()}`}
                 </button>
               </div>)}

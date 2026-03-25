@@ -368,11 +368,11 @@ export default function ComprarPage() {
 
                 {/* Seat map - scrollable container for mobile */}
                 <div style={{background:'#111827',borderRadius:16,marginBottom:20,overflow:'hidden'}}>
-                  <div style={{padding:'8px 12px 4px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
+                  <div style={{padding:'8px 12px 4px',display:'flex',alignItems:'center',justifyContent:'center'}}>
                     <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>← Desliza para ver todo el mapa →</span>
                   </div>
-                  <div style={{overflowX:'auto',overflowY:'hidden',WebkitOverflowScrolling:'touch',padding:'0 8px 12px',minHeight:200}}>
-                    <div style={{minWidth:750,transform:'scale(0.85)',transformOrigin:'top left',width:'118%'}}>
+                  <div style={{overflowX:'scroll',overflowY:'hidden',WebkitOverflowScrolling:'touch',padding:'0 8px 12px'}}>
+                    <div style={{minWidth:680}}>
                       <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
                     </div>
                   </div>

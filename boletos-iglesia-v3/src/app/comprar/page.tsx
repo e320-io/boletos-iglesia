@@ -116,7 +116,10 @@ export default function ComprarPage() {
       .bp-detail-back{position:absolute;top:16px;left:16px;z-index:2;width:36px;height:36px;border-radius:50%;background:rgba(0,0,0,.4);backdrop-filter:blur(10px);border:none;color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:18px}
       .bp-detail-hero-noimg{height:120px;background:linear-gradient(135deg,#0c1120,#1a2744);display:flex;align-items:flex-end;padding:20px;position:relative}
 
-      .bp-sheet{background:#f8f9fb;border-radius:24px 24px 0 0;margin-top:-24px;position:relative;flex:1;z-index:1}
+      .bp-sheet{background:#f8f9fb;border-radius:24px 24px 0 0;margin-top:-24px;position:relative;flex:1;z-index:1;color:#111}
+      .bp-sheet *{color:inherit}
+      .bp-sheet input, .bp-sheet select{color:#111 !important}
+      .bp-sheet input::placeholder{color:#bbb !important}
       .bp-sheet-handle{width:36px;height:4px;border-radius:2px;background:#d1d5db;margin:12px auto 0}
       .bp-sheet-inner{max-width:480px;margin:0 auto;padding:20px 20px 32px}
 
@@ -139,7 +142,7 @@ export default function ComprarPage() {
       .bp-field{margin-bottom:12px}
       .bp-flabel{display:block;font-size:11px;font-weight:600;color:#888;margin-bottom:4px;letter-spacing:.3px;text-transform:uppercase}
       .bp-finput{width:100%;padding:12px 14px;border-radius:12px;font-size:14px;background:#fff;border:1.5px solid #e5e7eb;color:#111;outline:none;font-family:'Plus Jakarta Sans',sans-serif;transition:.2s}
-      .bp-finput:focus{border-color:#00e5ff;box-shadow:0 0 0 3px rgba(0,229,255,.1)}
+      .bp-finput:focus{border-color:#00bcd4;box-shadow:0 0 0 3px rgba(0,188,212,.1)}
       .bp-finput::placeholder{color:#bbb}
       select.bp-finput{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' fill='none'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23999' stroke-width='1.5'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center;padding-right:36px;background-color:#fff}
 
@@ -178,7 +181,7 @@ export default function ComprarPage() {
       .bp-err{background:#fef2f2;border:1px solid #fecaca;border-radius:12px;padding:10px;font-size:12px;color:#dc2626;text-align:center;margin-bottom:12px}
 
       /* Seat bar */
-      .bp-sbar{position:sticky;bottom:0;z-index:40;background:rgba(248,249,251,.95);backdrop-filter:blur(20px);border-top:1px solid #eee;padding:12px 16px}
+      .bp-sbar{position:sticky;bottom:0;z-index:40;background:rgba(248,249,251,.97);backdrop-filter:blur(20px);border-top:1px solid #eee;padding:12px 16px;color:#111}
       .bp-sbar-in{max-width:480px;margin:0 auto;display:flex;align-items:center;justify-content:space-between;gap:10px}
 
       @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}

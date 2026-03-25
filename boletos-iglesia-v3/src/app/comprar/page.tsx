@@ -357,26 +357,42 @@ export default function ComprarPage() {
 
               {/* ---- ASIENTOS ---- */}
               {step==='asientos' && ev.tiene_asientos && (<div className="bp-anim">
-                <div className="bp-form-title">Elige tu lugar</div>
-                <div style={{display:'flex',gap:10,fontSize:10,marginBottom:12,color:'#888'}}>
-                  <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:2,background:'rgba(16,185,129,.4)'}}></span>Libre</span>
-                  <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:2,background:'#00e5ff'}}></span>Tuyo</span>
-                  <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:2,background:'rgba(0,188,212,.2)'}}></span>Ocupado</span>
+                <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
+                  <div style={{fontSize:18,fontWeight:800,color:'#111'}}>Elige tu lugar</div>
+                  <div style={{display:'flex',gap:10,fontSize:10,color:'#888'}}>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#a8e6cf'}}></span>Libre</span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#00bcd4'}}></span>Tuyo</span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#ccc'}}></span>Ocupado</span>
+                  </div>
                 </div>
-                <div style={{background:'#0a0e1a',borderRadius:12,padding:16,marginBottom:16}}>
+
+                {/* Seat map in dark container with horizontal scroll */}
+                <div style={{background:'#111827',borderRadius:16,padding:'16px 12px',marginBottom:20,overflowX:'auto',WebkitOverflowScrolling:'touch'}}>
                   <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
                 </div>
-                {error && <div className="bp-err">{error}</div>}
-                <div className="bp-sbar">
-                  <div className="bp-sbar-in">
-                    <div>{selectedSeats.length>0 ? (
-                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>{selectedSeats.map(id=><span key={id} className="bp-badge">{sl(id)}</span>)}</div>
-                    ) : <span style={{fontSize:11,color:'#bbb'}}>Toca un asiento</span>}</div>
-                    <div style={{display:'flex',gap:6}}>
-                      <button className="bp-btn-outline bp-btn" style={{width:'auto',padding:'8px 14px',fontSize:12}} onClick={()=>{setStep('datos');setError('');}}>← Atrás</button>
-                      <button className="bp-btn" style={{width:'auto',padding:'8px 18px',fontSize:12}} onClick={goPago}>Pagar →</button>
-                    </div>
+
+                {/* Selected seats display */}
+                {selectedSeats.length > 0 && (
+                  <div style={{background:'#f0feff',border:'1.5px solid #b2ebf2',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:12,fontWeight:600,color:'#00838f'}}>Seleccionados:</span>
+                    {selectedSeats.map(id => (
+                      <span key={id} style={{background:'#00bcd4',color:'#fff',padding:'6px 14px',borderRadius:10,fontSize:14,fontWeight:800,letterSpacing:'.5px'}}>{sl(id)}</span>
+                    ))}
                   </div>
+                )}
+
+                {error && <div className="bp-err">{error}</div>}
+
+                {/* Action buttons */}
+                <div style={{display:'flex',gap:10,marginBottom:16}}>
+                  <button onClick={()=>{setStep('datos');setError('');}}
+                    style={{flex:1,padding:14,borderRadius:14,fontSize:14,fontWeight:700,border:'1.5px solid #e5e7eb',background:'#fff',color:'#888',cursor:'pointer'}}>
+                    ← Atrás
+                  </button>
+                  <button onClick={goPago}
+                    style={{flex:2,padding:14,borderRadius:14,fontSize:15,fontWeight:800,border:'none',background:'#0c1120',color:'#fff',cursor:'pointer',boxShadow:'0 4px 16px rgba(0,0,0,.15)'}}>
+                    Pagar ${total.toLocaleString()} →
+                  </button>
                 </div>
               </div>)}
 

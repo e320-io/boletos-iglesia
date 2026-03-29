@@ -26,6 +26,7 @@ export const METODOS_PAGO = [
   { value: 'efectivo', label: 'Efectivo', icon: '💵' },
   { value: 'transferencia', label: 'Transferencia', icon: '🏦' },
   { value: 'tarjeta', label: 'Tarjeta', icon: '💳' },
+  { value: 'stripe', label: 'Stripe', icon: '🔵' },
   { value: 'otro', label: 'Otro', icon: '📋' },
 ] as const;
 

@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         await supabase.from('pagos').insert({
           registro_id: reg.id,
           monto: pagoBoleto,
-          metodo_pago: 'tarjeta',
+          metodo_pago: 'stripe',
           referencia: `Stripe-${session.id}`,
         });
 

@@ -201,12 +201,21 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
         const totalTarjeta = allPagos.filter(p => p.metodo_pago === 'tarjeta').reduce((s: number, p: any) => s + Number(p.monto), 0);
         const totalTransferencia = allPagos.filter(p => p.metodo_pago === 'transferencia').reduce((s: number, p: any) => s + Number(p.monto), 0);
         const totalOtro = allPagos.filter(p => p.metodo_pago === 'otro').reduce((s: number, p: any) => s + Number(p.monto), 0);
+        const stripePagos = allPagos.filter(p => p.metodo_pago === 'stripe');
+        const totalStripe = stripePagos.reduce((s: number, p: any) => s + Number(p.monto), 0);
 
-        // Mercado Pago: 3.5% + IVA (16%) = 3.5% * 1.16 = 4.06%
+        // Stripe MX: 3.6% + IVA (16%) = ~4.18%
+        const comisionStripe = totalStripe * (0.036 * 1.16);
+        const netoStripe = totalStripe - comisionStripe;
+
+        // Stripe esta semana
+        const inicioSemana = new Date(); inicioSemana.setDate(inicioSemana.getDate() - inicioSemana.getDay()); inicioSemana.setHours(0,0,0,0);
+        const stripeEstaSemana = stripePagos.filter((p: any) => p.created_at && new Date(p.created_at) >= inicioSemana).reduce((s: number, p: any) => s + Number(p.monto), 0);
+
         const comisionPorcentaje = 0.035 * 1.16; // 4.06%
         const comisionTarjeta = totalTarjeta * comisionPorcentaje;
         const netoTarjeta = totalTarjeta - comisionTarjeta;
-        const netoTotal = totalEfectivo + netoTarjeta + totalTransferencia + totalOtro;
+        const netoTotal = totalEfectivo + netoTarjeta + netoStripe + totalTransferencia + totalOtro;
 
         return (
           <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
@@ -243,6 +252,17 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
 
               <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
                 <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">🔵</span>
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Stripe</span>
+                </div>
+                <div className="text-2xl font-bold text-indigo-400">${totalStripe.toLocaleString()}</div>
+                <div className="text-[10px] mt-1 text-red-400">- ${comisionStripe.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} comisión (4.18%)</div>
+                <div className="text-[10px] text-indigo-400/60">Neto: ${netoStripe.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                <div className="text-[10px] mt-1 text-indigo-300">Esta semana: ${stripeEstaSemana.toLocaleString()}</div>
+              </div>
+
+              <div className="rounded-lg p-4" style={{ background: 'var(--color-bg)' }}>
+                <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">📋</span>
                   <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>Otro</span>
                 </div>
@@ -256,7 +276,7 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
               <div>
                 <div className="text-sm font-medium">Ingreso neto real (después de comisiones)</div>
                 <div className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                  Comisión Mercado Pago: 3.5% + IVA (4.06%) sobre ${totalTarjeta.toLocaleString()} en tarjeta = -${comisionTarjeta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  Tarjeta (4.06%): -${comisionTarjeta.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Stripe (4.18%): -${comisionStripe.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </div>
               </div>
               <div className="text-right">

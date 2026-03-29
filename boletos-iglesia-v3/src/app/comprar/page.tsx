@@ -1,16 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Asiento, Nacion } from '@/types';
 import SeatMap from '@/components/SeatMap';
-import Script from 'next/script';
 
 interface Evento {
   id: string; nombre: string; slug: string; fecha: string; descripcion: string;
   precio_default: number; tiene_asientos: boolean; es_gratuito: boolean; usa_equipos: boolean;
 }
-declare global { interface Window { MercadoPago: any; } }
 
 const EVENT_IMAGES: Record<string, string> = {
   'legacy-women': '/flyer-legacy-women.jpg',
@@ -26,7 +24,7 @@ export default function ComprarPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
-  const [mpReady, setMpReady] = useState(false);
+
   const [nombre, setNombre] = useState('');
   const [correo, setCorreo] = useState('');
   const [telefono, setTelefono] = useState('');
@@ -37,8 +35,6 @@ export default function ComprarPage() {
   const [numBoletos, setNumBoletos] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [step, setStep] = useState<'eventos'|'datos'|'asientos'|'pago'>('eventos');
-  const walletRef = useRef<HTMLDivElement>(null);
-  const mpInstanceRef = useRef<any>(null);
 
   useEffect(() => {
     supabase.from('eventos').select('*').eq('activo', true).eq('compra_online', true).order('fecha')
@@ -59,22 +55,15 @@ export default function ComprarPage() {
   const goAsientos = () => { if(!nombre.trim()){setError('Ingresa tu nombre');return;} if(!correo.trim()){setError('Ingresa tu correo');return;} setError(''); setStep(ev?.tiene_asientos?'asientos':'pago'); };
   const goPago = () => { if(selectedSeats.length<numBoletos){setError(`Selecciona ${numBoletos} asiento${numBoletos>1?'s':''}`);return;} setError(''); setStep('pago'); };
 
-  const initMP = useCallback(async () => {
-    if (!ev||!mpReady) return; setProcessing(true); setError('');
+  const checkout = async () => {
+    if (!ev) return; setProcessing(true); setError('');
     try {
-      const r = await fetch('/api/mercadopago/create-preference', { method:'POST', headers:{'Content-Type':'application/json'},
+      const r = await fetch('/api/stripe/create-checkout-session', { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ eventoId:ev.id, nombre:nombre.trim(), correo:correo.trim(), telefono:telefono.trim()||null, whatsapp:whatsapp.trim()||null, edad:edad||null, nacionId:nacionId||null, equipoId:equipoId||null, asientoIds:selectedSeats.length>0?selectedSeats:null, cantidad:numBoletos })});
       const d = await r.json(); if(!r.ok) throw new Error(d.error);
-      if(mpInstanceRef.current) { try { await mpInstanceRef.current.bricks().destroy('wallet_container'); } catch {} }
-      if(walletRef.current) walletRef.current.innerHTML='';
-      const mp = new window.MercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY,{locale:'es-MX'});
-      mpInstanceRef.current = mp;
-      await mp.bricks().create('wallet','wallet_container',{initialization:{preferenceId:d.preferenceId}});
-      setProcessing(false);
+      window.location.href = d.url;
     } catch(e:any){setError(e.message||'Error');setProcessing(false);}
-  },[ev,mpReady,nombre,correo,telefono,whatsapp,edad,nacionId,equipoId,selectedSeats,numBoletos]);
-
-  useEffect(()=>{if(step==='pago'&&mpReady)initMP();},[step,mpReady,initMP]);
+  };
 
   const total = (ev?.precio_default||0)*numBoletos;
   const hasEq = equipos.length>0;
@@ -83,7 +72,6 @@ export default function ComprarPage() {
   const reset = () => { setStep('eventos'); setEv(null); setSelectedSeats([]); setError(''); };
 
   return (<>
-    <Script src="https://sdk.mercadopago.com/js/v2" onLoad={()=>setMpReady(true)} />
     <style jsx global>{`
       @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
       .bp{min-height:100dvh;font-family:'Plus Jakarta Sans',sans-serif;overflow-x:hidden;position:relative}
@@ -421,13 +409,11 @@ export default function ComprarPage() {
                   </div>
                 </div>
 
-                <div style={{background:'#fff',borderRadius:12,padding:16,border:'1px solid #eee',marginBottom:16}}>
-                  <div className="bp-form-title" style={{marginTop:0}}>Método de pago</div>
-                  {processing&&<div style={{textAlign:'center',padding:16,color:'#999',fontSize:13}}>Preparando opciones...</div>}
-                  <div id="wallet_container" ref={walletRef}></div>
-                </div>
-
                 {error && <div className="bp-err">{error}</div>}
+                <button onClick={checkout} disabled={processing}
+                  style={{width:'100%',padding:16,borderRadius:16,fontSize:16,fontWeight:800,border:'none',cursor:'pointer',background:'linear-gradient(135deg,#635bff,#7c72ff)',color:'#fff',marginBottom:12,boxShadow:'0 4px 20px rgba(99,91,255,.35)',letterSpacing:'.3px',opacity:processing?0.6:1}}>
+                  {processing ? 'Redirigiendo...' : `Pagar $${total.toLocaleString()} con tarjeta`}
+                </button>
                 <button className="bp-btn bp-btn-outline" onClick={()=>{setStep(ev.tiene_asientos?'asientos':'datos');setError('');}}>← Volver</button>
               </div>)}
             </div>

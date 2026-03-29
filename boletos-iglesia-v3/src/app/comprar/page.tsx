@@ -38,6 +38,7 @@ export default function ComprarPage() {
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [step, setStep] = useState<'eventos'|'datos'|'asientos'|'pago'>('eventos');
   const walletRef = useRef<HTMLDivElement>(null);
+  const mpInstanceRef = useRef<any>(null);
 
   useEffect(() => {
     supabase.from('eventos').select('*').eq('activo', true).eq('compra_online', true).order('fecha')
@@ -64,8 +65,10 @@ export default function ComprarPage() {
       const r = await fetch('/api/mercadopago/create-preference', { method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ eventoId:ev.id, nombre:nombre.trim(), correo:correo.trim(), telefono:telefono.trim()||null, whatsapp:whatsapp.trim()||null, edad:edad||null, nacionId:nacionId||null, equipoId:equipoId||null, asientoIds:selectedSeats.length>0?selectedSeats:null, cantidad:numBoletos })});
       const d = await r.json(); if(!r.ok) throw new Error(d.error);
+      if(mpInstanceRef.current) { try { await mpInstanceRef.current.bricks().destroy('wallet_container'); } catch {} }
       if(walletRef.current) walletRef.current.innerHTML='';
       const mp = new window.MercadoPago(process.env.NEXT_PUBLIC_MP_PUBLIC_KEY,{locale:'es-MX'});
+      mpInstanceRef.current = mp;
       await mp.bricks().create('wallet','wallet_container',{initialization:{preferenceId:d.preferenceId}});
       setProcessing(false);
     } catch(e:any){setError(e.message||'Error');setProcessing(false);}

@@ -35,7 +35,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const isFreeEvent = evento.precio_default === 0;
   const canRegister = userRole === 'admin' || userRole === 'registro' || userRole === 'evento';
   const canSeeDashboard = userRole === 'admin' || userRole === 'dueno';
-  const canSeeRegistros = canRegister && userRole !== 'evento'; // evento role only sees new registration
+  const canSeeRegistros = (canRegister && userRole !== 'evento') || userRole === 'dueno';
   const [tab, setTab] = useState<Tab>(userRole === 'dueno' ? 'dashboard' : (userRole === 'evento' ? 'nuevo' : 'registros'));
   const { user } = useAuth();
 
@@ -329,7 +329,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
               <button onClick={() => { setTab('registros'); setSelectedRegistro(null); }}
                 className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'registros' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 style={tab === 'registros' ? { background: 'var(--color-accent)' } : {}}>
-                Registros ({registros.length})
+                {userRole === 'dueno' ? '📋 Asistentes' : 'Registros'} ({registros.length})
               </button>
             )}
             {canSeeDashboard && (
@@ -676,8 +676,9 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
         )}
 
         {tab === 'registros' && !selectedRegistro && (
-          <RegistrosList registros={registros} naciones={naciones} onSelect={setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} />
+          <RegistrosList registros={registros} naciones={naciones} equipos={equipos}
+            onSelect={userRole === 'dueno' ? () => {} : setSelectedRegistro}
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} />
         )}
 
         {tab === 'registros' && selectedRegistro && (

@@ -9,6 +9,7 @@ import type { Registro, Nacion } from '@/types';
 interface Props {
   registros: Registro[];
   naciones: Nacion[];
+  equipos?: any[];
   onSelect: (r: Registro) => void;
   onRefresh: () => void;
   privacyMode?: boolean;
@@ -18,18 +19,21 @@ interface Props {
   addToast?: (type: 'success' | 'error' | 'info', message: string) => void;
   userRole?: string;
   isFreeEvent?: boolean;
+  readOnly?: boolean;
 }
 
-export default function RegistrosList({ registros, naciones, onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false }: Props) {
+export default function RegistrosList({ registros, naciones, equipos = [], onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false, readOnly = false }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const canSeeMoney = userRole !== 'registro' && !isFreeEvent;
   const [filterStatus, setFilterStatus] = useState<string>('todos');
   const [filterNacion, setFilterNacion] = useState<string>('todos');
+  const [filterEquipo, setFilterEquipo] = useState<string>('todos');
   const [filterCheckIn, setFilterCheckIn] = useState<string>('todos');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [showCorte, setShowCorte] = useState(false);
 
+  const hasEquipos = equipos.length > 0;
   const hasTipos = registros.some(r => (r as any).tipo && (r as any).tipo !== 'general');
   const encuentristas = registros.filter(r => (r as any).tipo === 'Encuentrista').length;
   const servidores = registros.filter(r => (r as any).tipo === 'Servidor').length;
@@ -39,13 +43,14 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
       r.telefono?.includes(search) || r.correo?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'todos' || r.status === filterStatus;
     const matchNacion = filterNacion === 'todos' || r.nacion_id === filterNacion;
+    const matchEquipo = filterEquipo === 'todos' || (r as any).equipo_id === filterEquipo;
     const matchCheckIn = filterCheckIn === 'todos' ||
       (filterCheckIn === 'checked_1' && (r as any).checked_in) ||
       (filterCheckIn === 'unchecked_1' && !(r as any).checked_in) ||
       (filterCheckIn === 'checked_2' && (r as any).checked_in_2) ||
       (filterCheckIn === 'unchecked_2' && !(r as any).checked_in_2);
     const matchTipo = filterTipo === 'todos' || (r as any).tipo === filterTipo;
-    return matchSearch && matchStatus && matchNacion && matchCheckIn && matchTipo;
+    return matchSearch && matchStatus && matchNacion && matchEquipo && matchCheckIn && matchTipo;
   });
 
   const handleCheckIn = async (e: React.MouseEvent, registro: Registro) => {
@@ -134,12 +139,22 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             <option value="Servidor">Servidor</option>
           </select>
         )}
-        <select value={filterNacion} onChange={e => setFilterNacion(e.target.value)}
-          className="px-4 py-2.5 rounded-lg text-sm border"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
-          <option value="todos">Todas las naciones</option>
-          {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
-        </select>
+        {!hasEquipos && (
+          <select value={filterNacion} onChange={e => setFilterNacion(e.target.value)}
+            className="px-4 py-2.5 rounded-lg text-sm border"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <option value="todos">Todas las naciones</option>
+            {naciones.map(n => (<option key={n.id} value={n.id}>{n.nombre}</option>))}
+          </select>
+        )}
+        {hasEquipos && (
+          <select value={filterEquipo} onChange={e => setFilterEquipo(e.target.value)}
+            className="px-4 py-2.5 rounded-lg text-sm border"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <option value="todos">Todos los equipos</option>
+            {equipos.map(eq => (<option key={eq.id} value={eq.id}>{eq.nombre}</option>))}
+          </select>
+        )}
         {showCheckIn && (
           <select value={filterCheckIn} onChange={e => setFilterCheckIn(e.target.value)}
             className="px-4 py-2.5 rounded-lg text-sm border"
@@ -151,11 +166,13 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             {showCheckIn2 && <option value="unchecked_2">✗ Día 2: Sin check-in</option>}
           </select>
         )}
-        <button onClick={() => setShowCorte(!showCorte)}
-          className={`px-4 py-2.5 rounded-lg text-sm border transition-all ${showCorte ? 'border-cyan-500 text-white' : 'text-slate-400 hover:text-white'}`}
-          style={showCorte ? { background: 'rgba(0,188,212,0.15)', borderColor: 'var(--color-accent)' } : { borderColor: 'var(--color-border)' }}>
-          💰 Corte de caja
-        </button>
+        {!readOnly && (
+          <button onClick={() => setShowCorte(!showCorte)}
+            className={`px-4 py-2.5 rounded-lg text-sm border transition-all ${showCorte ? 'border-cyan-500 text-white' : 'text-slate-400 hover:text-white'}`}
+            style={showCorte ? { background: 'rgba(0,188,212,0.15)', borderColor: 'var(--color-accent)' } : { borderColor: 'var(--color-border)' }}>
+            💰 Corte de caja
+          </button>
+        )}
         <button onClick={async () => {
           addToast?.('info', 'Generando PDF...');
           try {
@@ -170,9 +187,13 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             const filterParts: string[] = [];
             if (filterStatus !== 'todos') filterParts.push(`Status: ${filterStatus.charAt(0).toUpperCase() + filterStatus.slice(1)}`);
             if (filterTipo !== 'todos') filterParts.push(`Tipo: ${filterTipo}`);
-            if (filterNacion !== 'todos') {
+            if (!hasEquipos && filterNacion !== 'todos') {
               const nacionName = naciones.find(n => n.id === filterNacion)?.nombre || '';
               filterParts.push(`Nación: ${nacionName}`);
+            }
+            if (hasEquipos && filterEquipo !== 'todos') {
+              const equipoName = equipos.find(eq => eq.id === filterEquipo)?.nombre || '';
+              filterParts.push(`Equipo: ${equipoName}`);
             }
             if (filterCheckIn === 'checked') filterParts.push('Con check-in');
             if (filterCheckIn === 'unchecked') filterParts.push('Sin check-in');
@@ -193,22 +214,24 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
 
             // Table data
             const tableData = filtered.map((r, i) => {
-              const nacionNombre = (r as any).nacion?.nombre || '—';
+              const grupoCampo = hasEquipos
+                ? ((r as any).equipo?.nombre || '—')
+                : ((r as any).nacion?.nombre || '—');
               const tipo = (r as any).tipo || 'general';
               const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1);
-              return [
-                (i + 1).toString(),
-                r.nombre,
-                nacionNombre,
-                tipo,
-                statusLabel,
-              ];
+              const row = [(i + 1).toString(), r.nombre, grupoCampo, statusLabel];
+              if (hasTipos) row.splice(3, 0, tipo);
+              return row;
             });
+
+            const headRow = ['#', 'Nombre', hasEquipos ? 'Equipo' : 'Nación'];
+            if (hasTipos) headRow.push('Tipo');
+            headRow.push('Status');
 
             // AutoTable
             (doc as any).autoTable({
               startY: 44,
-              head: [['#', 'Nombre', 'Nación', 'Tipo', 'Status']],
+              head: [headRow],
               body: tableData,
               theme: 'grid',
               headStyles: {
@@ -246,7 +269,20 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
             });
 
             // Save
-            const fileName = `asistentes${filterStatus !== 'todos' ? '_' + filterStatus : ''}${filterTipo !== 'todos' ? '_' + filterTipo.toLowerCase() : ''}.pdf`;
+            const fileNameParts = ['asistentes'];
+            if (filterStatus !== 'todos') fileNameParts.push(filterStatus);
+            if (filterTipo !== 'todos') fileNameParts.push(filterTipo.toLowerCase());
+            if (!hasEquipos && filterNacion !== 'todos') {
+              const nacionName = naciones.find(n => n.id === filterNacion)?.nombre || '';
+              fileNameParts.push(nacionName.toLowerCase().replace(/\s+/g, '_'));
+            }
+            if (hasEquipos && filterEquipo !== 'todos') {
+              const equipoName = equipos.find(eq => eq.id === filterEquipo)?.nombre || '';
+              fileNameParts.push(equipoName.toLowerCase().replace(/\s+/g, '_'));
+            }
+            if (filterCheckIn !== 'todos') fileNameParts.push(filterCheckIn);
+            if (search) fileNameParts.push('busqueda');
+            const fileName = fileNameParts.join('_') + '.pdf';
             doc.save(fileName);
             addToast?.('success', `PDF exportado: ${filtered.length} registros`);
           } catch (err: any) {
@@ -391,7 +427,10 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
               {showCheckIn2 && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nombre</th>
               {hasTipos && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
+              {hasEquipos
+                ? <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Equipo</th>
+                : <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
+              }
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>
               {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>}
               {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>}
@@ -403,8 +442,8 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
               const isCheckedIn = (r as any).checked_in;
               const isCheckedIn2 = (r as any).checked_in_2;
               return (
-                <tr key={r.id} onClick={() => onSelect(r)}
-                  className={`cursor-pointer transition-colors hover:bg-white/5 border-t`}
+                <tr key={r.id} onClick={readOnly ? undefined : () => onSelect(r)}
+                  className={`${readOnly ? '' : 'cursor-pointer hover:bg-white/5'} transition-colors border-t`}
                   style={{ borderColor: 'var(--color-border)' }}>
                   {showCheckIn && (
                     <td className="text-center px-3 py-3">
@@ -428,12 +467,21 @@ export default function RegistrosList({ registros, naciones, onSelect, onRefresh
                       </span>
                     </td>
                   )}
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).nacion?.color || '#666' }} />
-                      <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).nacion?.nombre || '—'}</span>
-                    </div>
-                  </td>
+                  {hasEquipos ? (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).equipo?.color || '#666' }} />
+                        <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).equipo?.nombre || '—'}</span>
+                      </div>
+                    </td>
+                  ) : (
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).nacion?.color || '#666' }} />
+                        <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).nacion?.nombre || '—'}</span>
+                      </div>
+                    </td>
+                  )}
                   <td className="px-4 py-3">
                     <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[r.status]}`}>{statusLabels[r.status]}</span>
                   </td>

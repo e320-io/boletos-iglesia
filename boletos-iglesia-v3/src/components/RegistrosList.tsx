@@ -112,7 +112,8 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const corteTarjeta = pagosHoy.filter((p: any) => p.metodo_pago === 'tarjeta').reduce((s: number, p: any) => s + Number(p.monto), 0);
   const corteTransferencia = pagosHoy.filter((p: any) => p.metodo_pago === 'transferencia').reduce((s: number, p: any) => s + Number(p.monto), 0);
   const corteOtro = pagosHoy.filter((p: any) => p.metodo_pago === 'otro').reduce((s: number, p: any) => s + Number(p.monto), 0);
-  const corteTotal = corteEfectivo + corteTarjeta + corteTransferencia + corteOtro;
+  const corteStripe = pagosHoy.filter((p: any) => p.metodo_pago === 'stripe').reduce((s: number, p: any) => s + Number(p.monto), 0);
+  const corteTotal = corteEfectivo + corteTarjeta + corteTransferencia + corteOtro + corteStripe;
 
   return (
     <div>
@@ -122,14 +123,16 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
           placeholder="Buscar por nombre, teléfono o correo..."
           className="flex-1 min-w-[250px] px-4 py-2.5 rounded-lg text-sm border bg-transparent"
           style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-        <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
-          className="px-4 py-2.5 rounded-lg text-sm border"
-          style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
-          <option value="todos">Todos los estados</option>
-          <option value="pendiente">Pendiente</option>
-          <option value="abono">Abono</option>
-          <option value="liquidado">Liquidado</option>
-        </select>
+        {!isFreeEvent && (
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}
+            className="px-4 py-2.5 rounded-lg text-sm border"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <option value="todos">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="abono">Abono</option>
+            <option value="liquidado">Liquidado</option>
+          </select>
+        )}
         {hasTipos && (
           <select value={filterTipo} onChange={e => setFilterTipo(e.target.value)}
             className="px-4 py-2.5 rounded-lg text-sm border"
@@ -307,7 +310,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               {pagosHoy.length} transacciones
             </span>
           </div>
-          <div className="grid grid-cols-5 gap-4 mb-4">
+          <div className="grid grid-cols-6 gap-4 mb-4">
             <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
               <div className="text-2xl font-bold" style={{ color: 'var(--color-accent)' }}>${corteTotal.toLocaleString()}</div>
               <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Total del día</div>
@@ -323,6 +326,10 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
               <div className="text-2xl font-bold text-purple-400">🏦 ${corteTransferencia.toLocaleString()}</div>
               <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Transferencia</div>
+            </div>
+            <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
+              <div className="text-2xl font-bold text-indigo-400">⚡ ${corteStripe.toLocaleString()}</div>
+              <div className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>Stripe</div>
             </div>
             <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
               <div className="text-2xl font-bold text-slate-400">📋 ${corteOtro.toLocaleString()}</div>
@@ -343,7 +350,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                     <tr key={i} className="border-t" style={{ borderColor: 'var(--color-border)' }}>
                       <td className="px-3 py-2">{(p as any).registroNombre}</td>
                       <td className="px-3 py-2">
-                        {p.metodo_pago === 'efectivo' ? '💵' : p.metodo_pago === 'tarjeta' ? '💳' : p.metodo_pago === 'transferencia' ? '🏦' : '📋'} {p.metodo_pago}
+                        {p.metodo_pago === 'efectivo' ? '💵' : p.metodo_pago === 'tarjeta' ? '💳' : p.metodo_pago === 'transferencia' ? '🏦' : p.metodo_pago === 'stripe' ? '⚡' : '📋'} {p.metodo_pago === 'stripe' ? 'Stripe (en línea)' : p.metodo_pago}
                       </td>
                       <td className="px-3 py-2 text-right font-bold text-emerald-400">${Number(p.monto).toLocaleString()}</td>
                       <td className="px-3 py-2 text-right" style={{ color: 'var(--color-text-muted)' }}>
@@ -431,7 +438,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                 ? <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Equipo</th>
                 : <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
               }
-              <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>
+              {!isFreeEvent && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>}
               {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>}
               {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>}
             </tr>
@@ -482,9 +489,11 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                       </div>
                     </td>
                   )}
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[r.status]}`}>{statusLabels[r.status]}</span>
-                  </td>
+                  {!isFreeEvent && (
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[r.status]}`}>{statusLabels[r.status]}</span>
+                    </td>
+                  )}
                   {canSeeMoney && <td className="px-4 py-3 text-right font-medium" style={blurStyle}>${Number(r.monto_pagado).toLocaleString()}</td>}
                   {canSeeMoney && (
                     <td className="px-4 py-3 text-right" style={blurStyle}>

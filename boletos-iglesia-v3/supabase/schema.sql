@@ -43,7 +43,7 @@ CREATE TABLE IF NOT EXISTS pagos (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   registro_id UUID NOT NULL REFERENCES registros(id) ON DELETE CASCADE,
   monto NUMERIC(10,2) NOT NULL,
-  metodo_pago TEXT NOT NULL CHECK (metodo_pago IN ('efectivo', 'transferencia', 'tarjeta', 'otro')),
+  metodo_pago TEXT NOT NULL CHECK (metodo_pago IN ('efectivo', 'transferencia', 'tarjeta', 'otro', 'stripe')),
   referencia TEXT,
   notas TEXT,
   created_at TIMESTAMPTZ DEFAULT now()

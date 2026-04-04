@@ -297,7 +297,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     liquidado: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
   };
   const metodoPagoLabels: Record<string, string> = {
-    efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', tarjeta: '💳 Tarjeta', otro: '📋 Otro',
+    efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', tarjeta: '💳 Tarjeta', otro: '📋 Otro', stripe: '💳 Stripe (en línea)',
   };
 
   return (

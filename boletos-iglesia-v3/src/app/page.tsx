@@ -7,6 +7,7 @@ import LoginScreen from '@/components/LoginScreen';
 import EventHome from '@/components/EventHome';
 import AdminPanel from '@/components/AdminPanel';
 import EventManager from '@/components/EventManager';
+import CorteDeCajaModal from '@/components/CorteDeCajaModal';
 
 interface Evento {
   id: string;
@@ -25,6 +26,7 @@ export default function HomePage() {
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showEventManager, setShowEventManager] = useState(false);
+  const [showCorteDeCaja, setShowCorteDeCaja] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -81,6 +83,7 @@ export default function HomePage() {
 
   // Event selector
   return (
+    <>
     <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--color-bg)' }}>
       <div className="w-full max-w-2xl">
         <div className="text-center mb-10">
@@ -141,20 +144,29 @@ export default function HomePage() {
 
         {/* Bottom bar */}
         <div className="flex items-center justify-between mt-8 pt-4 border-t" style={{ borderColor: 'var(--color-border)' }}>
-          {user.rol === 'admin' && (
-            <div className="flex gap-2">
-              <button onClick={() => setShowAdmin(true)}
+          <div className="flex gap-2">
+            {user.rol === 'admin' && (
+              <>
+                <button onClick={() => setShowAdmin(true)}
+                  className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                  ⚙️ Usuarios
+                </button>
+                <button onClick={() => setShowEventManager(true)}
+                  className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                  🎫 Eventos
+                </button>
+              </>
+            )}
+            {(user.rol === 'admin' || user.rol === 'registro') && (
+              <button onClick={() => setShowCorteDeCaja(true)}
                 className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-                ⚙️ Usuarios
+                📊 Corte de Caja
               </button>
-              <button onClick={() => setShowEventManager(true)}
-                className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-cyan-500"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
-                🎫 Eventos
-              </button>
-            </div>
-          )}
+            )}
+          </div>
           <div className="flex-1" />
           <button onClick={logout}
             className="px-4 py-2 rounded-lg text-sm border transition-all hover:border-red-500 hover:text-red-400"
@@ -164,5 +176,8 @@ export default function HomePage() {
         </div>
       </div>
     </div>
+
+    {showCorteDeCaja && <CorteDeCajaModal onClose={() => setShowCorteDeCaja(false)} />}
+    </>
   );
 }

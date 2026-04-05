@@ -12,6 +12,7 @@ import RegistrosList from '@/components/RegistrosList';
 import RegistroDetail from '@/components/RegistroDetail';
 import Dashboard from '@/components/Dashboard';
 import Toast from '@/components/Toast';
+import CorteDeCajaModal from '@/components/CorteDeCajaModal';
 
 type Tab = 'nuevo' | 'registros' | 'dashboard';
 
@@ -51,6 +52,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
   const [loading, setLoading] = useState(false);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [privacyMode, setPrivacyMode] = useState(false);
+  const [showCorteDeCaja, setShowCorteDeCaja] = useState(false);
 
   // Form state
   const [nombre, setNombre] = useState('');
@@ -342,6 +344,15 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
           </div>
 
           <div className="flex items-center gap-5">
+            {(userRole === 'admin' || userRole === 'registro') && (
+              <button onClick={() => setShowCorteDeCaja(true)}
+                className="text-sm px-3 py-1.5 rounded-lg border transition-all"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+                onMouseEnter={e => (e.currentTarget.style.borderColor = theme.accent)}
+                onMouseLeave={e => (e.currentTarget.style.borderColor = theme.border)}>
+                📊 Corte
+              </button>
+            )}
             {userRole !== 'registro' && userRole !== 'evento' && (
               <button onClick={() => setPrivacyMode(!privacyMode)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs border transition-all"
@@ -695,6 +706,8 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-2">
         {toasts.map(t => <Toast key={t.id} type={t.type} message={t.message} />)}
       </div>
+
+      {showCorteDeCaja && <CorteDeCajaModal onClose={() => setShowCorteDeCaja(false)} />}
     </div>
   );
 }

@@ -43,7 +43,7 @@ export async function GET() {
     }
 
     // Get the evento_id for each registro referenced by today's pagos
-    const registroIds = [...new Set(pagos.map(p => p.registro_id).filter(Boolean))];
+    const registroIds = Array.from(new Set(pagos.map(p => p.registro_id).filter(Boolean)));
     const { data: registros, error: registrosError } = await supabase
       .from('registros')
       .select('id, evento_id')

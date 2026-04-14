@@ -81,7 +81,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setFormError('');
     try {
-      const { data: createdData, error } = await supabase.rpc('create_user', {
+      const { error } = await supabase.rpc('create_user', {
         p_username: newUsername.toLowerCase().trim(),
         p_password: newPassword,
         p_nombre: newNombre.trim(),
@@ -90,11 +90,17 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
       });
       if (error) throw error;
 
-      // For dueno with multiple events, save the list
+      // For dueno with events, save via server API (uses service role — safe)
       if (newRol === 'dueno' && newEventoIds.length > 0) {
-        await supabase.from('usuarios')
-          .update({ evento_ids: newEventoIds })
-          .eq('username', newUsername.toLowerCase().trim());
+        const res = await fetch('/api/admin/assign-eventos', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: newUsername.toLowerCase().trim(), evento_ids: newEventoIds }),
+        });
+        if (!res.ok) {
+          const err = await res.json();
+          throw new Error(err.error || 'Error asignando eventos');
+        }
       }
 
       setFormSuccess(`Usuario "${newUsername}" creado`);

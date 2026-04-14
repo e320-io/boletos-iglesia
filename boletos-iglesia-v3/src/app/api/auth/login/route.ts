@@ -25,10 +25,16 @@ export async function POST(request: NextRequest) {
 
     const user = data[0];
 
-    // Fetch evento_id and evento_ids if user has events assigned
-    const { data: userData } = await supabase.from('usuarios').select('evento_id, evento_ids').eq('id', user.id).single();
+    // Fetch evento_id (guaranteed column) and evento_ids (may not exist yet)
+    const { data: userData } = await supabase.from('usuarios').select('evento_id').eq('id', user.id).single();
     const evento_id = userData?.evento_id || null;
-    const evento_ids: string[] | null = userData?.evento_ids || null;
+
+    // evento_ids is optional — only available after DB migration
+    let evento_ids: string[] | null = null;
+    try {
+      const { data: idsData } = await supabase.from('usuarios').select('evento_ids').eq('id', user.id).single();
+      evento_ids = idsData?.evento_ids || null;
+    } catch { /* column may not exist yet */ }
 
     // Update last login
     await supabase.from('usuarios').update({ last_login: new Date().toISOString() }).eq('id', user.id);

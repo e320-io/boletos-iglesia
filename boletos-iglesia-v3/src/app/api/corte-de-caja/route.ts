@@ -20,19 +20,7 @@ export async function GET() {
     const startUTC = yesterday.toISOString().slice(0, 10) + 'T00:00:00.000Z';
     const endUTC = tomorrow.toISOString().slice(0, 10) + 'T23:59:59.999Z';
 
-    // Get all active events
-    const { data: eventos, error: eventosError } = await supabase
-      .from('eventos')
-      .select('id, nombre')
-      .eq('activo', true)
-      .order('nombre');
-
-    if (eventosError) throw eventosError;
-    if (!eventos || eventos.length === 0) {
-      return NextResponse.json({ eventos: [], fecha: todayMX });
-    }
-
-    // Get today's pagos
+    // Get today's pagos first
     const { data: pagos, error: pagosError } = await supabase
       .from('pagos')
       .select('monto, metodo_pago, created_at, registro_id')
@@ -54,9 +42,26 @@ export async function GET() {
     if (registrosError) throw registrosError;
 
     const registroMap = new Map<string, string>();
+    const eventoIdsConPagos = new Set<string>();
     for (const r of (registros || [])) {
-      registroMap.set(r.id, r.evento_id);
+      if (r.evento_id) {
+        registroMap.set(r.id, r.evento_id);
+        eventoIdsConPagos.add(r.evento_id);
+      }
     }
+
+    // Fetch only the events that actually have payments today (regardless of activo status)
+    if (eventoIdsConPagos.size === 0) {
+      return NextResponse.json({ eventos: [], fecha: todayMX });
+    }
+
+    const { data: eventos, error: eventosError } = await supabase
+      .from('eventos')
+      .select('id, nombre')
+      .in('id', Array.from(eventoIdsConPagos))
+      .order('nombre');
+
+    if (eventosError) throw eventosError;
 
     // Build event totals map
     const eventoMap = new Map<string, {
@@ -68,7 +73,7 @@ export async function GET() {
       otro: number;
     }>();
 
-    for (const e of eventos) {
+    for (const e of (eventos || [])) {
       eventoMap.set(e.id, { nombre: e.nombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
     }
 

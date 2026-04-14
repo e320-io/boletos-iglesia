@@ -24,6 +24,7 @@ export default function HomePage() {
   const { user, loading: authLoading, logout } = useAuth();
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [selectedEvento, setSelectedEvento] = useState<Evento | null>(null);
+  const [duenEventos, setDuenEventos] = useState<Evento[]>([]);
   const [showAdmin, setShowAdmin] = useState(false);
   const [showEventManager, setShowEventManager] = useState(false);
   const [showCorteDeCaja, setShowCorteDeCaja] = useState(false);
@@ -35,8 +36,18 @@ export default function HomePage() {
       const { data } = await supabase.from('eventos').select('*').eq('activo', true).order('fecha');
       if (data) {
         setEventos(data);
-        // Auto-select event for evento-specific users
-        if (user && (user.rol === 'evento' || (user.rol === 'dueno' && user.evento_id)) && user.evento_id) {
+        // Auto-select for 'evento' role or dueno with a single evento_id (legacy)
+        if (user && user.rol === 'evento' && user.evento_id) {
+          const assigned = data.find((e: any) => e.id === user.evento_id);
+          if (assigned) setSelectedEvento(assigned);
+        }
+        // For dueno with evento_ids list, filter and auto-select if only one
+        if (user && user.rol === 'dueno' && user.evento_ids && user.evento_ids.length > 0) {
+          const filtered = data.filter((e: any) => user.evento_ids!.includes(e.id));
+          setDuenEventos(filtered);
+          if (filtered.length === 1) setSelectedEvento(filtered[0]);
+        } else if (user && user.rol === 'dueno' && user.evento_id) {
+          // Legacy single evento_id for dueno
           const assigned = data.find((e: any) => e.id === user.evento_id);
           if (assigned) setSelectedEvento(assigned);
         }
@@ -76,9 +87,13 @@ export default function HomePage() {
 
   // Inside an event
   if (selectedEvento) {
+    const isDuenMulti = user.rol === 'dueno' && duenEventos.length > 1;
     return <EventHome evento={selectedEvento}
-      onBack={(user.rol === 'evento' || (user.rol === 'dueno' && user.evento_id)) ? () => logout() : () => setSelectedEvento(null)}
-      userRole={user.rol} />;
+      onBack={user.rol === 'evento' ? () => logout() : () => setSelectedEvento(null)}
+      userRole={user.rol}
+      availableEventos={isDuenMulti ? duenEventos : undefined}
+      onEventChange={isDuenMulti ? (e: any) => setSelectedEvento(e) : undefined}
+    />;
   }
 
   // Event selector
@@ -100,7 +115,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid gap-4">
-          {eventos.map(e => {
+          {(duenEventos.length > 0 ? duenEventos : eventos).map(e => {
             const fecha = new Date(e.fecha + 'T12:00:00');
             const hoy = new Date();
             const diff = Math.ceil((fecha.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));

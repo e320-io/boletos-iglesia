@@ -31,7 +31,13 @@ interface Evento {
   tiene_asientos: boolean;
 }
 
-export default function EventHome({ evento, onBack, userRole = 'registro' }: { evento: Evento; onBack: () => void; userRole?: string }) {
+export default function EventHome({ evento, onBack, userRole = 'registro', availableEventos, onEventChange }: {
+  evento: Evento;
+  onBack: () => void;
+  userRole?: string;
+  availableEventos?: Evento[];
+  onEventChange?: (evento: Evento) => void;
+}) {
   const theme = getTheme(evento.slug);
   const isFreeEvent = evento.precio_default === 0;
   const canRegister = userRole === 'admin' || userRole === 'registro' || userRole === 'evento';
@@ -312,10 +318,32 @@ export default function EventHome({ evento, onBack, userRole = 'registro' }: { e
               ← {userRole === 'evento' ? 'Cerrar sesión' : 'Eventos'}
             </button>
             <div>
-              <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>{evento.nombre}</h1>
-              <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                {new Date(evento.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
-              </p>
+              {availableEventos && availableEventos.length > 1 && onEventChange ? (
+                <div className="flex items-center gap-2">
+                  <select
+                    value={evento.id}
+                    onChange={e => {
+                      const next = availableEventos.find(ev => ev.id === e.target.value);
+                      if (next) onEventChange(next);
+                    }}
+                    className="font-bold text-lg rounded-lg px-2 py-1 border bg-transparent cursor-pointer"
+                    style={{ fontFamily: 'var(--font-display)', borderColor: theme.border, color: 'var(--color-text)', background: 'var(--color-surface)' }}>
+                    {availableEventos.map(ev => (
+                      <option key={ev.id} value={ev.id}>{ev.nombre}</option>
+                    ))}
+                  </select>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    {new Date(evento.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>{evento.nombre}</h1>
+                  <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                    {new Date(evento.fecha + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </p>
+                </>
+              )}
             </div>
           </div>
 

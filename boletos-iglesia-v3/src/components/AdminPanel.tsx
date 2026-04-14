@@ -33,6 +33,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
   const [newNombre, setNewNombre] = useState('');
   const [newRol, setNewRol] = useState('registro');
   const [newEventoId, setNewEventoId] = useState('');
+  const [newEventoIds, setNewEventoIds] = useState<string[]>([]);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
 
@@ -80,20 +81,27 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
     setLoading(true);
     setFormError('');
     try {
-      const { error } = await supabase.rpc('create_user', {
+      const { data: createdData, error } = await supabase.rpc('create_user', {
         p_username: newUsername.toLowerCase().trim(),
         p_password: newPassword,
         p_nombre: newNombre.trim(),
         p_rol: newRol,
-        p_evento_id: (newRol === 'evento' || newRol === 'dueno') && newEventoId ? newEventoId : null,
+        p_evento_id: newRol === 'evento' && newEventoId ? newEventoId : null,
       });
       if (error) throw error;
+
+      // For dueno with multiple events, save the list
+      if (newRol === 'dueno' && newEventoIds.length > 0) {
+        await supabase.from('usuarios')
+          .update({ evento_ids: newEventoIds })
+          .eq('username', newUsername.toLowerCase().trim());
+      }
 
       setFormSuccess(`Usuario "${newUsername}" creado`);
       if (user) {
         await logActivity({ userId: user.id, userName: user.nombre, action: 'usuario_creado', detail: `${newNombre.trim()} (${newUsername.toLowerCase().trim()}) — ${newRol}` });
       }
-      setNewUsername(''); setNewPassword(''); setNewNombre(''); setNewRol('registro');
+      setNewUsername(''); setNewPassword(''); setNewNombre(''); setNewRol('registro'); setNewEventoIds([]);
       setTimeout(() => { setFormSuccess(''); setShowForm(false); }, 2000);
       fetchUsers();
     } catch (error: any) {
@@ -204,7 +212,7 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
                     { value: 'evento', label: '🎫 Evento', desc: 'Un solo evento' },
                     { value: 'admin', label: '⚙️ Admin', desc: 'Todo + usuarios' },
                   ].map(r => (
-                    <button key={r.value} onClick={() => { setNewRol(r.value); if (r.value !== 'evento') setNewEventoId(''); }}
+                    <button key={r.value} onClick={() => { setNewRol(r.value); if (r.value !== 'evento') setNewEventoId(''); if (r.value !== 'dueno') setNewEventoIds([]); }}
                       className={`px-2 py-2 rounded-lg text-xs border transition-all text-center ${newRol === r.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                       style={newRol === r.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
                       <div className="font-bold">{r.label}</div>
@@ -213,17 +221,52 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
                   ))}
                 </div>
               </div>
-              {(newRol === 'evento' || newRol === 'dueno') && (
+              {newRol === 'evento' && (
                 <div className="col-span-2">
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
-                    Evento asignado {newRol === 'evento' ? '*' : '(opcional — si no seleccionas, ve todos)'}
+                    Evento asignado *
                   </label>
                   <select value={newEventoId} onChange={e => setNewEventoId(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-lg text-sm border"
                     style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                    <option value="">{newRol === 'dueno' ? 'Todos los eventos' : 'Seleccionar evento...'}</option>
+                    <option value="">Seleccionar evento...</option>
                     {eventos.map(e => (<option key={e.id} value={e.id}>{e.nombre}</option>))}
                   </select>
+                </div>
+              )}
+              {newRol === 'dueno' && (
+                <div className="col-span-2">
+                  <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>
+                    Eventos visibles <span style={{ color: 'var(--color-text-muted)', fontWeight: 'normal' }}>(sin selección = ve todos)</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {eventos.map(e => {
+                      const checked = newEventoIds.includes(e.id);
+                      return (
+                        <button
+                          key={e.id}
+                          type="button"
+                          onClick={() => setNewEventoIds(prev => checked ? prev.filter(id => id !== e.id) : [...prev, e.id])}
+                          className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs border text-left transition-all"
+                          style={{
+                            borderColor: checked ? 'var(--color-accent)' : 'var(--color-border)',
+                            background: checked ? 'rgba(0,188,212,0.1)' : 'transparent',
+                            color: checked ? 'var(--color-text)' : 'var(--color-text-muted)',
+                          }}>
+                          <span className="w-4 h-4 rounded border-2 flex-shrink-0 flex items-center justify-center text-[10px]"
+                            style={{ borderColor: checked ? 'var(--color-accent)' : 'var(--color-border)', background: checked ? 'var(--color-accent)' : 'transparent', color: 'white' }}>
+                            {checked ? '✓' : ''}
+                          </span>
+                          {e.nombre}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {newEventoIds.length > 0 && (
+                    <p className="text-[10px] mt-1.5" style={{ color: 'var(--color-accent)' }}>
+                      {newEventoIds.length} evento{newEventoIds.length > 1 ? 's' : ''} seleccionado{newEventoIds.length > 1 ? 's' : ''}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

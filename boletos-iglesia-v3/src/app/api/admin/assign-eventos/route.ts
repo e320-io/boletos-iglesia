@@ -21,10 +21,26 @@ export async function POST(request: NextRequest) {
 
     // Use service role key — bypasses RLS and updates only the target user
     const supabase = createServerClient();
+
+    // Safety check: never modify admin accounts via this endpoint
+    const { data: targetUser } = await supabase
+      .from('usuarios')
+      .select('rol')
+      .eq('username', username)
+      .single();
+
+    if (!targetUser) {
+      return NextResponse.json({ error: 'Usuario no encontrado' }, { status: 404 });
+    }
+    if (targetUser.rol === 'admin') {
+      return NextResponse.json({ error: 'No se puede modificar una cuenta admin' }, { status: 403 });
+    }
+
     const { error } = await supabase
       .from('usuarios')
       .update({ evento_ids: evento_ids?.length > 0 ? evento_ids : null })
-      .eq('username', username);
+      .eq('username', username)
+      .eq('rol', 'dueno');
 
     if (error) throw error;
 

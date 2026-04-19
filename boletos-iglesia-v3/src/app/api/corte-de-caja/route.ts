@@ -44,17 +44,21 @@ export async function GET() {
 
     let pagosHoy = 0;
     let pagosSinRegistro = 0;
+    const eventosDetectados = new Set<string>();
 
     for (const p of pagos) {
       const pagoDateMX = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
       if (pagoDateMX !== todayMX) continue;
       pagosHoy++;
 
-      const registro = p.registro as any;
+      // Supabase may return the FK join as object or array depending on schema direction
+      const raw = p.registro as any;
+      const registro = Array.isArray(raw) ? raw[0] : raw;
       if (!registro || !registro.evento_id) { pagosSinRegistro++; continue; }
 
       const eventoId: string = registro.evento_id;
       const eventoNombre: string = registro.evento?.nombre ?? eventoId;
+      eventosDetectados.add(eventoId);
 
       if (!eventoMap.has(eventoId)) {
         eventoMap.set(eventoId, { nombre: eventoNombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
@@ -87,7 +91,7 @@ export async function GET() {
     return NextResponse.json({
       eventos: result,
       fecha: todayMX,
-      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro },
+      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro, eventosDetectados: eventosDetectados.size },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

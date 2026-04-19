@@ -358,8 +358,12 @@ export default function ComprarPage() {
                 </div>
 
                 {/* Seat map */}
-                <div className="theme-comprar" style={{background:'#111827',borderRadius:16,marginBottom:20,padding:'12px 8px 16px'}}>
-                  <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
+                <div style={{background:'#111827',borderRadius:16,marginBottom:20,overflow:'hidden'}}>
+                  <div className="theme-comprar" style={{overflowX:'auto',WebkitOverflowScrolling:'touch',padding:'12px 8px 16px',display:'flex',justifyContent:'flex-start'}}>
+                    <div style={{margin:'0 auto'}}>
+                      <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
+                    </div>
+                  </div>
                 </div>
 
                 {/* Selected seats display */}

@@ -149,14 +149,6 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
 }
 
-/* Smaller seats on mobile so each 10-col section fits without horizontal scroll */
-@media (max-width: 639px) {
-  .seat {
-    width: 26px;
-    height: 22px;
-    font-size: 0.58rem;
-  }
-}
 
 /* Toast animation */
 @keyframes slideIn {

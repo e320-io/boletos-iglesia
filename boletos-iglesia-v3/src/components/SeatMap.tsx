@@ -39,21 +39,21 @@ function SeatSection({
 
   return (
     <div>
-      <div className="flex gap-0.5 mb-1 ml-6 sm:ml-7">
+      <div className="flex gap-0.5 mb-1 ml-8">
         {cols.map(c => (
-          <div key={c} className="w-7 sm:w-[36px] text-center text-[10px] font-medium" style={{ color: 'var(--color-text-muted)' }}>
+          <div key={c} className="w-[36px] text-center text-[10px] font-medium" style={{ color: 'var(--color-text-muted)' }}>
             {c}
           </div>
         ))}
       </div>
       {rows.map(row => (
         <div key={row} className="flex items-center gap-0.5 mb-0.5">
-          <div className="w-6 sm:w-7 text-right text-[10px] sm:text-xs font-bold pr-1" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="w-7 text-right text-xs font-bold pr-1" style={{ color: 'var(--color-text-muted)' }}>
             {row}
           </div>
           {cols.map(col => {
             const seat = asientoMap.get(`${row}${col}`);
-            if (!seat) return <div key={col} className="w-7 h-6 sm:w-[36px] sm:h-[30px]" />;
+            if (!seat) return <div key={col} className="w-[36px] h-[30px]" />;
 
             const isSelected = selectedSeats.includes(seat.id);
             const isHighlighted = highlightSeats?.includes(seat.id);
@@ -244,7 +244,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
       )}
 
       {/* Top Section: A-D */}
-      <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 sm:justify-center mb-8">
+      <div className="flex gap-8 justify-center mb-8">
         <SeatSection
           rows={SEAT_LAYOUT.topLeft.rows}
           cols={SEAT_LAYOUT.topLeft.cols}
@@ -268,7 +268,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
       </div>
 
       {/* Middle Section: E-T */}
-      <div className="flex flex-col sm:flex-row gap-6 sm:gap-8 sm:justify-center mb-8">
+      <div className="flex gap-8 justify-center mb-8">
         <SeatSection
           rows={SEAT_LAYOUT.midLeft.rows}
           cols={SEAT_LAYOUT.midLeft.cols}
@@ -294,7 +294,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
       {/* Bottom Right Section: U-Z (separate physical block, right-aligned) */}
       {hasCentro && (
         <div className="flex gap-8 justify-center">
-          <div className="hidden sm:block w-[408px] shrink-0" />
+          <div className="w-[408px] shrink-0" />
           <SeatSection
             rows={SEAT_LAYOUT.bottom.rows}
             cols={SEAT_LAYOUT.bottom.cols}

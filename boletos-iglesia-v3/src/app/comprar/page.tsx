@@ -351,30 +351,23 @@ export default function ComprarPage() {
                 <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:16}}>
                   <div style={{fontSize:18,fontWeight:800,color:'#111'}}>Elige tu lugar</div>
                   <div style={{display:'flex',gap:10,fontSize:10,color:'#888'}}>
-                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#a8e6cf'}}></span>Libre</span>
-                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#00bcd4'}}></span>Tuyo</span>
-                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#ccc'}}></span>Ocupado</span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#fff',border:'1px solid #ccc'}}></span>Libre</span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#10b981'}}></span>Tuyo</span>
+                    <span style={{display:'flex',alignItems:'center',gap:3}}><span style={{width:8,height:8,borderRadius:3,background:'#00bcd4'}}></span>Ocupado</span>
                   </div>
                 </div>
 
-                {/* Seat map - scrollable container for mobile */}
-                <div style={{background:'#111827',borderRadius:16,marginBottom:20,overflow:'hidden'}}>
-                  <div style={{padding:'8px 12px 4px',display:'flex',alignItems:'center',justifyContent:'center'}}>
-                    <span style={{fontSize:10,color:'rgba(255,255,255,.4)'}}>← Desliza para ver todo el mapa →</span>
-                  </div>
-                  <div style={{overflowX:'scroll',overflowY:'hidden',WebkitOverflowScrolling:'touch',padding:'0 8px 12px'}}>
-                    <div style={{minWidth:680}}>
-                      <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
-                    </div>
-                  </div>
+                {/* Seat map */}
+                <div className="theme-comprar" style={{background:'#111827',borderRadius:16,marginBottom:20,padding:'12px 8px 16px'}}>
+                  <SeatMap asientos={asientos} selectedSeats={selectedSeats} onSeatClick={seatClick} />
                 </div>
 
                 {/* Selected seats display */}
                 {selectedSeats.length > 0 && (
-                  <div style={{background:'#f0feff',border:'1.5px solid #b2ebf2',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
-                    <span style={{fontSize:12,fontWeight:600,color:'#00838f'}}>Seleccionados:</span>
+                  <div style={{background:'#f0fdf4',border:'1.5px solid #a7f3d0',borderRadius:14,padding:'14px 16px',marginBottom:16,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}}>
+                    <span style={{fontSize:12,fontWeight:600,color:'#065f46'}}>Seleccionados:</span>
                     {selectedSeats.map(id => (
-                      <span key={id} style={{background:'#00bcd4',color:'#fff',padding:'6px 14px',borderRadius:10,fontSize:14,fontWeight:800,letterSpacing:'.5px'}}>{sl(id)}</span>
+                      <span key={id} style={{background:'#10b981',color:'#fff',padding:'6px 14px',borderRadius:10,fontSize:14,fontWeight:800,letterSpacing:'.5px'}}>{sl(id)}</span>
                     ))}
                   </div>
                 )}

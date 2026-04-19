@@ -123,6 +123,41 @@ h1, h2, h3, h4, h5, h6 {
   cursor: default;
 }
 
+/* Purchase page theme: libre=blanco, ocupado=azul/cyan, tuyo=verde */
+.theme-comprar .seat-disponible {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a2236;
+  border-color: rgba(255, 255, 255, 0.7);
+}
+.theme-comprar .seat-disponible:hover {
+  background: #ffffff;
+  border-color: #e0f7fa;
+  transform: scale(1.08);
+  box-shadow: 0 0 10px rgba(255, 255, 255, 0.3);
+}
+.theme-comprar .seat-ocupado {
+  background: var(--color-accent);
+  color: white;
+  border-color: #0097a7;
+  cursor: default;
+}
+.theme-comprar .seat-selected {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+  transform: scale(1.08);
+  box-shadow: 0 0 14px rgba(16, 185, 129, 0.6);
+}
+
+/* Smaller seats on mobile so each 10-col section fits without horizontal scroll */
+@media (max-width: 639px) {
+  .seat {
+    width: 26px;
+    height: 22px;
+    font-size: 0.58rem;
+  }
+}
+
 /* Toast animation */
 @keyframes slideIn {
   from { transform: translateX(100%); opacity: 0; }

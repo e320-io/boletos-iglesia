@@ -53,6 +53,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
+  const [addingConfSeats, setAddingConfSeats] = useState<string | null>(null);
+  const [addingExtraRows, setAddingExtraRows] = useState<string | null>(null);
 
   const fetchEventos = useCallback(async () => {
     const { data } = await supabase.from('eventos').select('*').order('fecha', { ascending: false });
@@ -134,22 +136,21 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
           const sections = [
             { rows: ['A','B','C','D'], cols: Array.from({length:10},(_,i)=>i+1), seccion: 'izquierda' },
             { rows: ['A','B','C','D'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
-            { rows: ['E','F','G','H','I','J','K','L','M','N'], cols: Array.from({length:10},(_,i)=>i+1), seccion: 'izquierda' },
-            { rows: ['E','F','G','H','I','J','K','L','M','N'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
-            { rows: ['O','P','Q','R','S'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
+            { rows: ['E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T'], cols: Array.from({length:10},(_,i)=>i+1), seccion: 'izquierda' },
+            { rows: ['E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'derecha' },
+            // Separate bottom center block at the back (U-Z to avoid label conflict with main blocks)
+            { rows: ['U','V','W','X','Y','Z'], cols: Array.from({length:10},(_,i)=>i+11), seccion: 'centro' },
           ];
           for (const sec of sections) {
             for (const row of sec.rows) {
               for (const col of sec.cols) {
-                seats.push({
-                  fila: row,
-                  columna: col,
-                  seccion: sec.seccion,
-                  estado: 'disponible',
-                  evento_id: eventoId,
-                });
+                seats.push({ fila: row, columna: col, seccion: sec.seccion, estado: 'disponible', evento_id: eventoId });
               }
             }
+          }
+          // Conferencistas zone: RE-1 to RE-40 (admin-only, not for sale)
+          for (let n = 1; n <= 40; n++) {
+            seats.push({ fila: 'RE', columna: n, seccion: 'conferencistas', estado: 'disponible', evento_id: eventoId });
           }
           // Insert in batches
           for (let i = 0; i < seats.length; i += 100) {
@@ -199,6 +200,117 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const handleToggleActive = async (id: string, active: boolean) => {
     await supabase.from('eventos').update({ activo: !active }).eq('id', id);
     fetchEventos();
+  };
+
+  const handleAddConferencistasSeats = async (eventoId: string) => {
+    setAddingConfSeats(eventoId);
+    try {
+      // Check existing conferencistas seats
+      const { data: existing } = await supabase
+        .from('asientos').select('id, fila, columna').eq('evento_id', eventoId).eq('seccion', 'conferencistas');
+
+      if (existing && existing.length > 0) {
+        const isCorrect = existing.length === 40 && existing.every(s => s.fila === 'RE');
+        if (isCorrect) {
+          alert('Este evento ya tiene los 40 asientos RE correctamente generados.');
+          return;
+        }
+        const hasAssigned = existing.some((s: any) => s.registro_id);
+        const msg = hasAssigned
+          ? `Hay ${existing.length} asientos de conferencistas. Algunos están asignados. ¿Borrar y recrear como 2 filas de 20 (RE-1 a RE-40)? Los asientos asignados se liberarán.`
+          : `Hay ${existing.length} asientos en formato anterior. ¿Borrar y recrear como RE-1 a RE-40 (2 filas × 10 de cada lado)?`;
+        if (!confirm(msg)) return;
+        // Delete all existing conferencistas seats (free assignments first)
+        await supabase.from('asientos').update({ registro_id: null }).eq('evento_id', eventoId).eq('seccion', 'conferencistas');
+        const { error: delError } = await supabase.from('asientos').delete().eq('evento_id', eventoId).eq('seccion', 'conferencistas');
+        if (delError) throw delError;
+      }
+
+      const seats: any[] = [];
+      for (let n = 1; n <= 40; n++) {
+        seats.push({ fila: 'RE', columna: n, seccion: 'conferencistas', estado: 'disponible', evento_id: eventoId });
+      }
+      const { error } = await supabase.from('asientos').insert(seats);
+      if (error) throw error;
+      alert('✓ 40 asientos RE-1 a RE-40 generados correctamente (2 filas × 10 de cada lado).');
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      setAddingConfSeats(null);
+    }
+  };
+
+  const handleAddExtraRows = async (eventoId: string) => {
+    setAddingExtraRows(eventoId);
+    try {
+      const extraRows = ['O','P','Q','R','S','T'];
+      const centroRows = ['U','V','W','X','Y','Z'];
+
+      // Fetch existing extra-row seats (izquierda/derecha) and centro seats separately
+      const { data: existingMain } = await supabase
+        .from('asientos').select('fila, columna, seccion').eq('evento_id', eventoId)
+        .in('fila', extraRows).in('seccion', ['izquierda','derecha']);
+
+      const { data: existingCentro } = await supabase
+        .from('asientos').select('fila, columna, registro_id').eq('evento_id', eventoId)
+        .eq('seccion', 'centro');
+
+      // Migrate old centro seats with old labels (O-S) → delete only if unassigned
+      const oldCentroRows = ['O','P','Q','R','S'];
+      const oldCentroSeats = (existingCentro || []).filter((s: any) => oldCentroRows.includes(s.fila));
+      const hasOldCentro = oldCentroSeats.length > 0;
+      if (hasOldCentro) {
+        const assignedOld = oldCentroSeats.filter((s: any) => s.registro_id);
+        if (assignedOld.length > 0) {
+          alert(`No se puede migrar el bloque central: hay ${assignedOld.length} asiento(s) con registro asignado. Reasigna esos registros manualmente antes de continuar.`);
+          return;
+        }
+        await supabase.from('asientos').delete()
+          .eq('evento_id', eventoId).eq('seccion', 'centro').in('fila', oldCentroRows);
+      }
+
+      const existingMainSet = new Set((existingMain || []).map((s: any) => `${s.seccion}:${s.fila}${s.columna}`));
+      const existingCentroSet = new Set(
+        (existingCentro || []).filter((s: any) => !oldCentroRows.includes(s.fila)).map((s: any) => `${s.fila}${s.columna}`)
+      );
+
+      const seats: any[] = [];
+
+      // New rows O-T on left (izquierda) and right (derecha) — main blocks
+      for (const row of extraRows) {
+        for (let col = 1; col <= 10; col++) {
+          if (!existingMainSet.has(`izquierda:${row}${col}`))
+            seats.push({ fila: row, columna: col, seccion: 'izquierda', estado: 'disponible', evento_id: eventoId });
+        }
+        for (let col = 11; col <= 20; col++) {
+          if (!existingMainSet.has(`derecha:${row}${col}`))
+            seats.push({ fila: row, columna: col, seccion: 'derecha', estado: 'disponible', evento_id: eventoId });
+        }
+      }
+
+      // Bottom center block U-Z (centro) — separate physical section
+      for (const row of centroRows) {
+        for (let col = 11; col <= 20; col++) {
+          if (!existingCentroSet.has(`${row}${col}`))
+            seats.push({ fila: row, columna: col, seccion: 'centro', estado: 'disponible', evento_id: eventoId });
+        }
+      }
+
+      if (seats.length === 0 && !hasOldCentro) {
+        alert('Las filas O-T y el bloque central U-Z ya existen en este evento.');
+        return;
+      }
+
+      for (let i = 0; i < seats.length; i += 100) {
+        const { error } = await supabase.from('asientos').insert(seats.slice(i, i + 100));
+        if (error) throw error;
+      }
+      alert(`✓ Listo: filas O-T izq/der + bloque central U-Z agregados${hasOldCentro ? ' (O-S centro eliminados y reemplazados)' : ''}.`);
+    } catch (e: any) {
+      alert(`Error: ${e.message}`);
+    } finally {
+      setAddingExtraRows(null);
+    }
   };
 
   const addFase = () => setFases([...fases, { nombre: '', precio: 0, fecha_inicio: '', fecha_fin: '' }]);
@@ -423,10 +535,26 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                   {e.ministerio && ` · ${e.ministerio}`}
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <button onClick={() => loadEventForEdit(e)}
                   className="px-3 py-1.5 rounded-lg text-xs border hover:border-cyan-500"
                   style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>✏️ Editar</button>
+                {e.tiene_asientos && (
+                  <button onClick={() => handleAddConferencistasSeats(e.id)}
+                    disabled={addingConfSeats === e.id}
+                    className="px-3 py-1.5 rounded-lg text-xs border hover:border-amber-500 hover:text-amber-400 disabled:opacity-50"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                    {addingConfSeats === e.id ? '...' : '⭐ Conferencistas'}
+                  </button>
+                )}
+                {e.tiene_asientos && (
+                  <button onClick={() => handleAddExtraRows(e.id)}
+                    disabled={addingExtraRows === e.id}
+                    className="px-3 py-1.5 rounded-lg text-xs border hover:border-emerald-500 hover:text-emerald-400 disabled:opacity-50"
+                    style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                    {addingExtraRows === e.id ? '...' : '➕ Filas O-T'}
+                  </button>
+                )}
                 <button onClick={() => handleToggleActive(e.id, e.activo)}
                   className={`px-3 py-1.5 rounded-lg text-xs border ${e.activo ? 'hover:border-red-500 hover:text-red-400' : 'hover:border-emerald-500 hover:text-emerald-400'}`}
                   style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>

@@ -34,11 +34,13 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const [showCorte, setShowCorte] = useState(false);
 
   const hasEquipos = equipos.length > 0;
-  const hasTipos = registros.some(r => (r as any).tipo && (r as any).tipo !== 'general');
-  const encuentristas = registros.filter(r => (r as any).tipo === 'Encuentrista').length;
-  const servidores = registros.filter(r => (r as any).tipo === 'Servidor').length;
+  // Conferencistas have their own tab; exclude them from the main list
+  const regularRegistros = registros.filter(r => (r as any).tipo !== 'conferencista');
+  const hasTipos = regularRegistros.some(r => (r as any).tipo && (r as any).tipo !== 'general');
+  const encuentristas = regularRegistros.filter(r => (r as any).tipo === 'Encuentrista').length;
+  const servidores = regularRegistros.filter(r => (r as any).tipo === 'Servidor').length;
 
-  const filtered = registros.filter(r => {
+  const filtered = regularRegistros.filter(r => {
     const matchSearch = !search || r.nombre.toLowerCase().includes(search.toLowerCase()) ||
       r.telefono?.includes(search) || r.correo?.toLowerCase().includes(search.toLowerCase());
     const matchStatus = filterStatus === 'todos' || r.status === filterStatus;

@@ -7,6 +7,7 @@ import { logActivity } from '@/lib/activity';
 import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion, Asiento, MetodoPago } from '@/types';
 import SeatMap from '@/components/SeatMap';
+import { seatLabel } from '@/lib/seatLabel';
 
 interface Props {
   registro: Registro;
@@ -46,7 +47,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [changingSeat, setChangingSeat] = useState(false);
 
   // Helper to get seat label
-  const getSeatLabel = (a: any) => a.fila && a.columna ? `${a.fila}${a.columna}` : a.id;
+  const getSeatLabel = (a: any) => seatLabel(a);
 
   // Group (grupo) detection — find related boletos by notas field
   const grupoTag = (registro.notas || '').match(/^Grupo de .+ \(\d+ boletos\)$/)?.[0];
@@ -180,7 +181,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
       const oldSeats = registroAsientos.map((a: any) => getSeatLabel(a)).join(', ');
       const newSeatLabels = selectedSeatForAssign.map(id => {
         const seat = asientos.find(a => a.id === id);
-        return seat ? `${seat.fila}${seat.columna}` : id;
+        return seat ? seatLabel(seat) : id;
       }).join(', ');
 
       addToast('success', `Asiento cambiado: ${oldSeats} → ${newSeatLabels}`);
@@ -637,7 +638,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       {selectedSeatForAssign.length > 0 && (
                         <span className="ml-2 inline-flex gap-1">{selectedSeatForAssign.map(id => {
                           const seat = asientos.find(a => a.id === id);
-                          const label = seat ? `${seat.fila}${seat.columna}` : id;
+                          const label = seat ? seatLabel(seat) : id;
                           return <span key={id} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{label}</span>;
                         })}</span>
                       )}
@@ -680,7 +681,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
               const seats = showGroupLiquidation ? groupSeats : selectedSeatForAssign;
               const seatLabels = seats.map(id => {
                 const seat = asientos.find(a => a.id === id);
-                return seat ? `${seat.fila}${seat.columna}` : id;
+                return seat ? seatLabel(seat) : id;
               });
               return seats.length > 0 ? (
                 <div className="flex items-center gap-2">
@@ -708,7 +709,8 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
           </div>
           <SeatMap asientos={asientos}
             selectedSeats={showGroupLiquidation ? groupSeats : selectedSeatForAssign}
-            onSeatClick={showGroupLiquidation ? handleGroupSeatClick : handleSeatClickForAssign} />
+            onSeatClick={showGroupLiquidation ? handleGroupSeatClick : handleSeatClickForAssign}
+            allowSelectConferencistas={true} />
         </div>
       )}
     </div>

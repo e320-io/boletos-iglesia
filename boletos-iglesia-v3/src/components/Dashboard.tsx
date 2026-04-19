@@ -218,12 +218,15 @@ interface Props {
   equipos?: any[];
 }
 
-export default function Dashboard({ registros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [] }: Props) {
+export default function Dashboard({ registros: allRegistros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [] }: Props) {
   const [filterMode, setFilterMode] = useState<'all' | 'week'>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [expandedEquipo, setExpandedEquipo] = useState<string | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+
+  // Exclude conferencistas from all dashboard stats
+  const registros = allRegistros.filter(r => (r as any).tipo !== 'conferencista');
 
   const totalRegistrados = registros.length;
   const checkedIn = registros.filter(r => r.checked_in).length;
@@ -329,8 +332,9 @@ export default function Dashboard({ registros, asientos, naciones, eventoFecha, 
   const boletosPendientes = registros.filter(r => r.status === 'pendiente').length;
 
   const hasAsientos = asientos.length > 0;
-  const totalAsientosOcupados = asientos.filter(a => a.estado === 'ocupado').length;
-  const totalAsientos = asientos.filter(a => a.estado !== 'no_disponible').length;
+  const regularAsientos = asientos.filter(a => a.fila !== 'RE');
+  const totalAsientosOcupados = regularAsientos.filter(a => a.estado === 'ocupado').length;
+  const totalAsientos = regularAsientos.filter(a => a.estado !== 'no_disponible').length;
   const porcentajeOcupacion = totalAsientos > 0 ? Math.round((totalAsientosOcupados / totalAsientos) * 100) : 0;
 
   const totalRecaudado = registros.reduce((s, r) => s + Number(r.monto_pagado), 0);

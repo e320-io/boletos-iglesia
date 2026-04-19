@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { METODOS_PAGO } from '@/lib/constants';
+import { METODOS_PAGO, CONF_SEAT_ROWS } from '@/lib/constants';
+import { seatLabel } from '@/lib/seatLabel';
 import { applyTheme, getTheme, resetTheme } from '@/lib/themes';
 import { logActivity } from '@/lib/activity';
 import { useAuth } from '@/lib/auth';
@@ -14,7 +15,7 @@ import Dashboard from '@/components/Dashboard';
 import Toast from '@/components/Toast';
 import CorteDeCajaModal from '@/components/CorteDeCajaModal';
 
-type Tab = 'nuevo' | 'registros' | 'dashboard';
+type Tab = 'nuevo' | 'registros' | 'dashboard' | 'conferencistas';
 
 interface ToastMessage {
   id: number;
@@ -85,6 +86,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   // Equipos for events like HollyFest
   const [equipos, setEquipos] = useState<any[]>([]);
 
+  // Conferencistas tab state (shared with cortesía mode)
+  const [confNombre, setConfNombre] = useState('');
+  const [confTelefono, setConfTelefono] = useState('');
+  const [confCorreo, setConfCorreo] = useState('');
+  const [confSelectedSeat, setConfSelectedSeat] = useState<string | null>(null);
+  const [cortesiaMode, setCortesiaMode] = useState(false);
+
   const addToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = Date.now();
     setToasts(prev => [...prev, { id, type, message }]);
@@ -127,6 +135,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   const resetForm = () => {
     setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
     setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setSplitPayment(false); setSplitMontos([{ metodo: 'efectivo', monto: '' }, { metodo: 'tarjeta', monto: '' }]); setTipo('Encuentrista');
+    setCortesiaMode(false); setConfNombre(''); setConfTelefono(''); setConfCorreo(''); setConfSelectedSeat(null);
   };
 
   // Computed: total based on number of boletos
@@ -302,6 +311,60 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
     }
   };
 
+  // Computed: separate conferencistas from regular registros
+  const regularRegistros = registros.filter(r => (r as any).tipo !== 'conferencista');
+  const confRegistros = registros.filter(r => (r as any).tipo === 'conferencista');
+  const hasConfSeats = asientos.some(a => a.seccion === 'conferencistas');
+
+  const handleRegistroConferencista = async () => {
+    if (!confNombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
+    if (!confSelectedSeat) { addToast('error', 'Selecciona un asiento RE en el mapa'); return; }
+    setLoading(true);
+    try {
+      const { data: reg, error: regError } = await supabase
+        .from('registros')
+        .insert({
+          nombre: confNombre.trim(),
+          telefono: confTelefono.trim() || null,
+          correo: confCorreo.trim() || null,
+          evento_id: evento.id,
+          tipo: 'conferencista',
+          monto_total: 0,
+          monto_pagado: 0,
+          status: 'liquidado',
+        })
+        .select()
+        .single();
+      if (regError) throw regError;
+      const { error: seatError } = await supabase
+        .from('asientos')
+        .update({ estado: 'ocupado', registro_id: reg.id })
+        .eq('id', confSelectedSeat);
+      if (seatError) throw seatError;
+      const seat = asientos.find(a => a.id === confSelectedSeat);
+      addToast('success', `${confNombre.trim()} → ${seatLabel(seat ?? { fila: 'RE', columna: 0 })}`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'asiento_asignado',
+          detail: `${confNombre.trim()} (conferencista) → ${seatLabel(seat ?? { fila: 'RE', columna: 0 })}`,
+          eventoId: evento.id });
+      }
+      if (confCorreo.trim()) {
+        try {
+          await fetch('/api/send-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registroId: reg.id, isCortesia: true }),
+          });
+        } catch {} // non-critical
+      }
+      setConfNombre(''); setConfTelefono(''); setConfCorreo(''); setConfSelectedSeat(null);
+      fetchData();
+    } catch (e: any) {
+      addToast('error', `Error: ${e.message}`);
+    } finally {
+      setLoading(false); }
+  };
+
   const BlurValue = ({ children, className = '' }: { children: React.ReactNode; className?: string }) => (
     <span className={className} style={privacyMode ? { filter: 'blur(8px)', userSelect: 'none' } : {}}>{children}</span>
   );
@@ -359,7 +422,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
               <button onClick={() => { setTab('registros'); setSelectedRegistro(null); }}
                 className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'registros' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 style={tab === 'registros' ? { background: 'var(--color-accent)' } : {}}>
-                {userRole === 'dueno' ? '📋 Asistentes' : 'Registros'} ({registros.length})
+                {userRole === 'dueno' ? '📋 Asistentes' : 'Registros'} ({regularRegistros.length})
               </button>
             )}
             {canSeeDashboard && (
@@ -367,6 +430,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                 className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'dashboard' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 style={tab === 'dashboard' ? { background: 'var(--color-accent)' } : {}}>
                 📊 Dashboard
+              </button>
+            )}
+            {userRole === 'admin' && evento.tiene_asientos && hasConfSeats && (
+              <button onClick={() => { setTab('conferencistas'); setSelectedRegistro(null); }}
+                className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'conferencistas' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                style={tab === 'conferencistas' ? { background: '#d97706' } : {}}>
+                ⭐ Conf. ({confRegistros.length})
               </button>
             )}
           </div>
@@ -391,13 +461,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
             {userRole !== 'evento' && (
             <div className="flex gap-6 text-sm">
               <div className="text-center">
-                <div className="font-bold text-lg" style={{ color: 'var(--color-accent)' }}>{registros.length}</div>
+                <div className="font-bold text-lg" style={{ color: 'var(--color-accent)' }}>{regularRegistros.length}</div>
                 <div style={{ color: 'var(--color-text-muted)' }}>Registros</div>
               </div>
               {!isFreeEvent && userRole !== 'registro' && (
                 <div className="text-center">
                   <BlurValue className="font-bold text-lg text-amber-400 block">
-                    ${registros.reduce((s, r) => s + Number(r.monto_pagado), 0).toLocaleString()}
+                    ${regularRegistros.reduce((s, r) => s + Number(r.monto_pagado), 0).toLocaleString()}
                   </BlurValue>
                   <div style={{ color: 'var(--color-text-muted)' }}>Recaudado</div>
                 </div>
@@ -411,42 +481,113 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
       <main className="max-w-[1600px] mx-auto p-6">
         {tab === 'nuevo' && (
           <div className={`grid grid-cols-1 ${evento.tiene_asientos ? 'xl:grid-cols-[1fr_420px]' : 'max-w-xl mx-auto'} gap-6`}>
-            {/* Seat map — always visible, interactive only when liquidando */}
+            {/* Seat map — always visible, interactive only when liquidando or cortesía */}
             {evento.tiene_asientos && (
-              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: cortesiaMode ? 'rgba(245,158,11,0.4)' : 'var(--color-border)' }}>
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                    {willBeLiquidado ? `Selecciona ${numBoletos} Asiento${numBoletos > 1 ? 's' : ''}` : 'Mapa de Asientos'}
+                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)', color: cortesiaMode ? '#f59e0b' : undefined }}>
+                    {cortesiaMode ? '⭐ Selecciona asiento RE' : willBeLiquidado ? `Selecciona ${numBoletos} Asiento${numBoletos > 1 ? 's' : ''}` : 'Mapa de Asientos'}
                   </h2>
                   <div className="flex gap-4 text-xs">
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
-                    {willBeLiquidado && (
+                    {(willBeLiquidado || cortesiaMode) && (
                       <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Seleccionado</span>
                     )}
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
                   </div>
                 </div>
-                {willBeLiquidado && selectedSeats.length > 0 && (
+                {cortesiaMode && confSelectedSeat && (() => {
+                  const seat = asientos.find(a => a.id === confSelectedSeat);
+                  return (
+                    <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+                      ✓ Asiento seleccionado: <strong>{seat ? seatLabel(seat) : '—'}</strong>
+                    </div>
+                  );
+                })()}
+                {cortesiaMode && !confSelectedSeat && (
+                  <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
+                    ⭐ Expande la sección Conferencistas y selecciona un asiento RE
+                  </div>
+                )}
+                {!cortesiaMode && willBeLiquidado && selectedSeats.length > 0 && (
                   <div className="rounded-lg p-3 mb-4 text-sm font-medium flex items-center gap-2" style={{ background: 'rgba(0,188,212,0.08)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-accent)' }}>
                     ✓ {selectedSeats.length}/{numBoletos} seleccionado{selectedSeats.length > 1 ? 's' : ''}: {selectedSeats.map(s => (
                       <span key={s} className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: 'var(--color-accent)' }}>{s}</span>
                     ))}
                   </div>
                 )}
-                {!willBeLiquidado && (
+                {!cortesiaMode && !willBeLiquidado && (
                   <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
                     👀 Vista de referencia — Liquida el boleto para seleccionar asiento.
                   </div>
                 )}
-                <SeatMap asientos={asientos} selectedSeats={willBeLiquidado ? selectedSeats : []}
-                  onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} onOccupiedClick={handleOccupiedSeatClick} readOnly={!willBeLiquidado} />
+                {cortesiaMode ? (
+                  <SeatMap asientos={asientos}
+                    selectedSeats={confSelectedSeat ? [confSelectedSeat] : []}
+                    onSeatClick={id => setConfSelectedSeat(prev => prev === id ? null : id)}
+                    onOccupiedClick={handleOccupiedSeatClick}
+                    readOnly={true}
+                    allowSelectConferencistas={true} />
+                ) : (
+                  <SeatMap asientos={asientos} selectedSeats={willBeLiquidado ? selectedSeats : []}
+                    onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} onOccupiedClick={handleOccupiedSeatClick} readOnly={!willBeLiquidado} />
+                )}
               </div>
             )}
 
             {/* Form */}
             <div className="space-y-4">
-              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
-                <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Datos del Registro</h2>
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: cortesiaMode ? 'rgba(245,158,11,0.4)' : 'var(--color-border)' }}>
+                <div className="flex items-center justify-between mb-5">
+                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                    {cortesiaMode ? '⭐ Registro Cortesía' : 'Datos del Registro'}
+                  </h2>
+                  {hasConfSeats && (
+                    <button onClick={() => { setCortesiaMode(v => !v); setConfSelectedSeat(null); setSelectedSeats([]); }}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold border transition-all"
+                      style={cortesiaMode
+                        ? { borderColor: 'rgba(245,158,11,0.6)', color: '#f59e0b', background: 'rgba(245,158,11,0.1)' }
+                        : { borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                      ⭐ Cortesía
+                    </button>
+                  )}
+                </div>
+
+                {/* Cortesía mode form */}
+                {cortesiaMode && (
+                  <div className="space-y-3">
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Nombre *</label>
+                      <input type="text" value={confNombre} onChange={e => setConfNombre(e.target.value)}
+                        placeholder="Nombre completo"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Teléfono (opcional)</label>
+                      <input type="tel" value={confTelefono} onChange={e => setConfTelefono(e.target.value)}
+                        placeholder="10 dígitos"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Correo (opcional)</label>
+                      <input type="email" value={confCorreo} onChange={e => setConfCorreo(e.target.value)}
+                        placeholder="correo@ejemplo.com"
+                        className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    </div>
+                    <button onClick={handleRegistroConferencista}
+                      disabled={loading || !confNombre.trim() || !confSelectedSeat}
+                      className="w-full py-3 rounded-lg font-bold text-white disabled:opacity-40"
+                      style={{ background: 'linear-gradient(135deg, #d97706, #b45309)', fontFamily: 'var(--font-display)' }}>
+                      {loading ? 'Registrando...' : confSelectedSeat ? `Registrar en ${seatLabel(asientos.find(a => a.id === confSelectedSeat) ?? { fila: '', columna: 0 })}` : 'Selecciona un asiento RE'}
+                    </button>
+                  </div>
+                )}
+
+                {/* Normal form */}
+                {!cortesiaMode && (
                 <div className="space-y-4">
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Nombre completo *</label>
@@ -604,9 +745,11 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
                 </div>
+                )}
+
               </div>
 
-              {!isFreeEvent && (
+              {!cortesiaMode && !isFreeEvent && (
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <h2 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Pago</h2>
                 <div className="space-y-4">
@@ -702,7 +845,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
               )}
 
               {/* Submit button for free events (outside payment card) */}
-              {isFreeEvent && (
+              {!cortesiaMode && isFreeEvent && (
                 <button onClick={handleSubmit}
                   disabled={loading || !nombre.trim() || (hasEquipos && !equipoId) || (!hasEquipos && !nacionId)}
                   className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
@@ -715,19 +858,152 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         )}
 
         {tab === 'registros' && !selectedRegistro && (
-          <RegistrosList registros={registros} naciones={naciones} equipos={equipos}
+          <RegistrosList registros={regularRegistros} naciones={naciones} equipos={equipos}
             onSelect={userRole === 'dueno' ? () => {} : setSelectedRegistro}
             onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} />
         )}
 
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos} allRegistros={registros}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 
         {tab === 'dashboard' && (
-          <Dashboard registros={registros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} />
+          <Dashboard registros={regularRegistros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} />
+        )}
+
+        {tab === 'conferencistas' && !selectedRegistro && (
+          <div className="grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-6">
+            {/* RE Seat Map */}
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'rgba(245,158,11,0.4)' }}>
+              <h2 className="text-lg font-bold mb-4" style={{ fontFamily: 'var(--font-display)', color: '#f59e0b' }}>
+                ⭐ Asientos Conferencistas — RE-1 a RE-42
+              </h2>
+              <div className="flex gap-8 justify-center">
+                {(['left', 'right'] as const).map(side => (
+                  <div key={side} className="space-y-0.5">
+                    {CONF_SEAT_ROWS.map((row, i) => (
+                      <div key={i} className="flex gap-0.5">
+                        {row[side].map(n => {
+                          const seat = asientos.find(a => a.seccion === 'conferencistas' && a.columna === n);
+                          const label = `RE-${n}`;
+                          const isSelected = confSelectedSeat === seat?.id;
+                          const isOcupado = seat?.estado === 'ocupado';
+                          const ocupante = isOcupado ? confRegistros.find(r => r.id === seat?.registro_id) : null;
+                          let cls = 'seat';
+                          if (isSelected) cls += ' seat-selected';
+                          else if (isOcupado) cls += ' seat-ocupado';
+                          else if (seat) cls += ' seat-disponible';
+                          return (
+                            <button key={n} className={cls} style={{ width: 44, cursor: seat ? 'pointer' : 'default' }}
+                              title={ocupante ? `${label} — ${ocupante.nombre}` : label}
+                              onClick={() => {
+                                if (!seat) return;
+                                if (isOcupado) {
+                                  const reg = registros.find(r => r.id === seat.registro_id);
+                                  if (reg) { setSelectedRegistro(reg); }
+                                } else {
+                                  setConfSelectedSeat(isSelected ? null : seat.id);
+                                }
+                              }}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <p className="text-center text-xs mt-4" style={{ color: 'var(--color-text-muted)' }}>
+                Click en disponible para seleccionar · Click en ocupado para ver registro
+              </p>
+            </div>
+
+            {/* Right column: form + list */}
+            <div className="space-y-6">
+              {/* Registration form */}
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Registrar Conferencista</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Nombre *</label>
+                    <input type="text" value={confNombre} onChange={e => setConfNombre(e.target.value)}
+                      placeholder="Nombre completo"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Teléfono (opcional)</label>
+                    <input type="tel" value={confTelefono} onChange={e => setConfTelefono(e.target.value)}
+                      placeholder="10 dígitos"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Correo (opcional)</label>
+                    <input type="email" value={confCorreo} onChange={e => setConfCorreo(e.target.value)}
+                      placeholder="correo@ejemplo.com"
+                      className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                  {confSelectedSeat && (() => {
+                    const seat = asientos.find(a => a.id === confSelectedSeat);
+                    return (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium"
+                        style={{ background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', color: '#f59e0b' }}>
+                        ✓ Asiento seleccionado: <strong>{seat ? seatLabel(seat) : '—'}</strong>
+                        <button onClick={() => setConfSelectedSeat(null)} className="ml-auto text-xs opacity-60 hover:opacity-100">✕</button>
+                      </div>
+                    );
+                  })()}
+                  {!confSelectedSeat && (
+                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Selecciona un asiento en el mapa</p>
+                  )}
+                  <button onClick={handleRegistroConferencista} disabled={loading || !confNombre.trim() || !confSelectedSeat}
+                    className="w-full py-3 rounded-lg font-bold text-white disabled:opacity-40"
+                    style={{ background: 'linear-gradient(135deg, #d97706, #b45309)', fontFamily: 'var(--font-display)' }}>
+                    {loading ? 'Registrando...' : 'Registrar sin pago'}
+                  </button>
+                </div>
+              </div>
+
+              {/* List of conferencistas */}
+              <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+                <h3 className="font-bold mb-3" style={{ fontFamily: 'var(--font-display)' }}>
+                  Registradas ({confRegistros.length}/42)
+                </h3>
+                {confRegistros.length === 0 ? (
+                  <p className="text-sm" style={{ color: 'var(--color-text-muted)' }}>Sin conferencistas registradas aún</p>
+                ) : (
+                  <div className="space-y-1">
+                    {confRegistros.map(r => {
+                      const rAsientos = (r.asientos || []) as any[];
+                      return (
+                        <button key={r.id} onClick={() => setSelectedRegistro(r)}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm hover:bg-white/5 text-left transition-colors"
+                          style={{ background: 'var(--color-bg)' }}>
+                          <span className="font-medium">{r.nombre}</span>
+                          {rAsientos.length > 0 && (
+                            <span className="px-2 py-0.5 rounded text-xs font-bold text-white" style={{ background: '#d97706' }}>
+                              {seatLabel(rAsientos[0])}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {tab === 'conferencistas' && selectedRegistro && (
+          <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros}
+            onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
       </main>
 

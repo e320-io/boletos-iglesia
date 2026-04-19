@@ -45,7 +45,7 @@ export interface Asiento {
   id: string;
   fila: string;
   columna: number;
-  seccion: 'izquierda' | 'derecha' | 'centro';
+  seccion: 'izquierda' | 'derecha' | 'centro' | 'conferencistas';
   estado: 'disponible' | 'ocupado' | 'no_disponible' | 'reservado';
   registro_id: string | null;
   created_at: string;

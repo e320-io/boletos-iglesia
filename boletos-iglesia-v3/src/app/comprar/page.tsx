@@ -47,7 +47,7 @@ export default function ComprarPage() {
       supabase.from('equipos_evento').select('*').eq('evento_id', e.id).order('nombre'),
       e.tiene_asientos ? supabase.from('asientos').select('*').eq('evento_id', e.id) : Promise.resolve({ data: [] }),
     ]);
-    if (n.data) setNaciones(n.data); if (eq.data) setEquipos(eq.data); if (a.data) setAsientos(a.data as Asiento[]);
+    if (n.data) setNaciones(n.data); if (eq.data) setEquipos(eq.data); if (a.data) setAsientos((a.data as Asiento[]).filter(s => s.seccion !== 'conferencistas'));
   }, []);
 
   const pick = (e: Evento) => { setEv(e); loadData(e); setStep('datos'); };
@@ -68,7 +68,7 @@ export default function ComprarPage() {
   const total = (ev?.precio_default||0)*numBoletos;
   const hasEq = equipos.length>0;
   const fmt = (f:string) => { const d=new Date(f+'T12:00:00'); return { day:d.getDate(), mon:d.toLocaleDateString('es-MX',{month:'short'}).toUpperCase(), full:d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) }; };
-  const sl = (id:string) => { const s=asientos.find(a=>a.id===id); return s?`${s.fila}${s.columna}`:id; };
+  const sl = (id:string) => { const s=asientos.find(a=>a.id===id); return s ? (s.fila==='RE'?`RE-${s.columna}`:`${s.fila}${s.columna}`) : id; };
   const reset = () => { setStep('eventos'); setEv(null); setSelectedSeats([]); setError(''); };
 
   return (<>

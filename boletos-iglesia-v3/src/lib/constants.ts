@@ -35,9 +35,16 @@ export const SEAT_LAYOUT = {
   // Top section: rows A-D
   topLeft: { rows: ['A', 'B', 'C', 'D'], cols: Array.from({ length: 10 }, (_, i) => i + 1) },
   topRight: { rows: ['A', 'B', 'C', 'D'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
-  // Middle section: rows E-N
-  midLeft: { rows: ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'], cols: Array.from({ length: 10 }, (_, i) => i + 1) },
-  midRight: { rows: ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
-  // Bottom section: rows O-S (only right side)
-  bottom: { rows: ['O', 'P', 'Q', 'R', 'S'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
+  // Middle section: rows E-T (extended with O-T)
+  midLeft: { rows: ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'], cols: Array.from({ length: 10 }, (_, i) => i + 1) },
+  midRight: { rows: ['E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
+  // Bottom center block: rows U-Z, separate physical section at the back
+  bottom: { rows: ['U', 'V', 'W', 'X', 'Y', 'Z'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
 };
+
+// Conferencistas zone: RE-1 to RE-40, 2 rows × 20 seats (10 left + 10 right), admin-only
+export const CONF_SEATS_TOTAL = 40;
+export const CONF_SEAT_ROWS: { left: number[]; right: number[] }[] = [
+  { left: [1,2,3,4,5,6,7,8,9,10],   right: [11,12,13,14,15,16,17,18,19,20]  },
+  { left: [21,22,23,24,25,26,27,28,29,30], right: [31,32,33,34,35,36,37,38,39,40] },
+];

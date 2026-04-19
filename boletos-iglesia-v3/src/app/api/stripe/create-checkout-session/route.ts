@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     let seatDesc = '';
     if (asientoIds && asientoIds.length > 0) {
       const { data: seats } = await supabase.from('asientos').select('fila, columna').in('id', asientoIds);
-      if (seats) seatDesc = ' — Asientos: ' + seats.map((s: any) => `${s.fila}${s.columna}`).join(', ');
+      if (seats) seatDesc = ' — Asientos: ' + seats.map((s: any) => s.fila === 'RE' ? `RE-${s.columna}` : `${s.fila}${s.columna}`).join(', ');
     }
 
     const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').trim();

@@ -88,10 +88,17 @@ export async function GET() {
       .filter(e => e.total > 0)
       .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
+    // Count pagos per MX date to help diagnose which day transactions land on
+    const pagosPorFecha: Record<string, number> = {};
+    for (const p of pagos) {
+      const d = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+      pagosPorFecha[d] = (pagosPorFecha[d] ?? 0) + 1;
+    }
+
     return NextResponse.json({
       eventos: result,
       fecha: todayMX,
-      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro, eventosDetectados: eventosDetectados.size },
+      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro, eventosDetectados: eventosDetectados.size, pagosPorFecha },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

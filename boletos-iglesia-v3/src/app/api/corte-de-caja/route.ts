@@ -11,7 +11,7 @@ export async function GET() {
     const now = new Date();
     const todayMX = now.toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }); // YYYY-MM-DD
 
-    // Query window: yesterday through tomorrow UTC to cover any MX timezone offset
+    // Query window: yesterday through tomorrow UTC to cover MX timezone offset (UTC-6)
     const yesterday = new Date(now);
     yesterday.setDate(yesterday.getDate() - 1);
     const tomorrow = new Date(now);
@@ -20,50 +20,19 @@ export async function GET() {
     const startUTC = yesterday.toISOString().slice(0, 10) + 'T00:00:00.000Z';
     const endUTC = tomorrow.toISOString().slice(0, 10) + 'T23:59:59.999Z';
 
-    // Get today's pagos first
+    // Single query: pagos → registros → eventos in one round-trip
     const { data: pagos, error: pagosError } = await supabase
       .from('pagos')
-      .select('monto, metodo_pago, created_at, registro_id')
+      .select('monto, metodo_pago, created_at, registro:registros(evento_id, evento:eventos(nombre))')
       .gte('created_at', startUTC)
       .lte('created_at', endUTC);
 
     if (pagosError) throw pagosError;
     if (!pagos || pagos.length === 0) {
-      return NextResponse.json({ eventos: [], fecha: todayMX });
+      return NextResponse.json({ eventos: [], fecha: todayMX, debug: { pagosEncontrados: 0, startUTC, endUTC } });
     }
 
-    // Get the evento_id for each registro referenced by today's pagos
-    const registroIds = Array.from(new Set(pagos.map(p => p.registro_id).filter(Boolean)));
-    const { data: registros, error: registrosError } = await supabase
-      .from('registros')
-      .select('id, evento_id')
-      .in('id', registroIds);
-
-    if (registrosError) throw registrosError;
-
-    const registroMap = new Map<string, string>();
-    const eventoIdsConPagos = new Set<string>();
-    for (const r of (registros || [])) {
-      if (r.evento_id) {
-        registroMap.set(r.id, r.evento_id);
-        eventoIdsConPagos.add(r.evento_id);
-      }
-    }
-
-    // Fetch only the events that actually have payments today (regardless of activo status)
-    if (eventoIdsConPagos.size === 0) {
-      return NextResponse.json({ eventos: [], fecha: todayMX });
-    }
-
-    const { data: eventos, error: eventosError } = await supabase
-      .from('eventos')
-      .select('id, nombre')
-      .in('id', Array.from(eventoIdsConPagos))
-      .order('nombre');
-
-    if (eventosError) throw eventosError;
-
-    // Build event totals map
+    // Build event totals map — filter to Mexico City today
     const eventoMap = new Map<string, {
       nombre: string;
       efectivo: number;
@@ -73,17 +42,23 @@ export async function GET() {
       otro: number;
     }>();
 
-    for (const e of (eventos || [])) {
-      eventoMap.set(e.id, { nombre: e.nombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
-    }
+    let pagosHoy = 0;
+    let pagosSinRegistro = 0;
 
     for (const p of pagos) {
-      // Filter to today's Mexico City date
       const pagoDateMX = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
       if (pagoDateMX !== todayMX) continue;
+      pagosHoy++;
 
-      const eventoId = registroMap.get(p.registro_id);
-      if (!eventoId || !eventoMap.has(eventoId)) continue;
+      const registro = p.registro as any;
+      if (!registro || !registro.evento_id) { pagosSinRegistro++; continue; }
+
+      const eventoId: string = registro.evento_id;
+      const eventoNombre: string = registro.evento?.nombre ?? eventoId;
+
+      if (!eventoMap.has(eventoId)) {
+        eventoMap.set(eventoId, { nombre: eventoNombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
+      }
 
       const ev = eventoMap.get(eventoId)!;
       const monto = Number(p.monto);
@@ -106,9 +81,14 @@ export async function GET() {
         stripe: data.stripe,
         otro: data.otro,
       }))
-      .filter(e => e.total > 0);
+      .filter(e => e.total > 0)
+      .sort((a, b) => a.nombre.localeCompare(b.nombre));
 
-    return NextResponse.json({ eventos: result, fecha: todayMX });
+    return NextResponse.json({
+      eventos: result,
+      fecha: todayMX,
+      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro },
+    });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

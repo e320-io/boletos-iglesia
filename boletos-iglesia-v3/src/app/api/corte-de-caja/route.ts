@@ -21,15 +21,17 @@ export async function GET() {
     const endUTC = tomorrow.toISOString().slice(0, 10) + 'T23:59:59.999Z';
 
     // Single query: pagos → registros → eventos in one round-trip
-    const { data: pagos, error: pagosError } = await supabase
+    // count:'exact' lets us detect if the default row limit is cutting results
+    const { data: pagos, error: pagosError, count: totalEnRango } = await supabase
       .from('pagos')
-      .select('monto, metodo_pago, created_at, registro:registros(evento_id, evento:eventos(nombre))')
+      .select('monto, metodo_pago, created_at, registro:registros(evento_id, evento:eventos(nombre))', { count: 'exact' })
       .gte('created_at', startUTC)
-      .lte('created_at', endUTC);
+      .lte('created_at', endUTC)
+      .limit(10000);
 
     if (pagosError) throw pagosError;
     if (!pagos || pagos.length === 0) {
-      return NextResponse.json({ eventos: [], fecha: todayMX, debug: { pagosEncontrados: 0, startUTC, endUTC } });
+      return NextResponse.json({ eventos: [], fecha: todayMX, debug: { pagosEncontrados: 0, totalEnRango, startUTC, endUTC } });
     }
 
     // Build event totals map — filter to Mexico City today
@@ -98,7 +100,7 @@ export async function GET() {
     return NextResponse.json({
       eventos: result,
       fecha: todayMX,
-      debug: { pagosEncontrados: pagos.length, pagosHoy, pagosSinRegistro, eventosDetectados: eventosDetectados.size, pagosPorFecha },
+      debug: { pagosEncontrados: pagos.length, totalEnRango, pagosHoy, pagosSinRegistro, eventosDetectados: eventosDetectados.size, pagosPorFecha },
     });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

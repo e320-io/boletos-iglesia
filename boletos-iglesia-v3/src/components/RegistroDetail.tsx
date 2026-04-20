@@ -15,12 +15,13 @@ interface Props {
   asientos?: Asiento[];
   tieneAsientos?: boolean;
   allRegistros?: Registro[];
+  esEncuentro?: boolean;
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, onBack, onRefresh, addToast }: Props) {
   const { user } = useAuth();
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -34,6 +35,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [editCorreo, setEditCorreo] = useState(registro.correo || '');
   const [editNacionId, setEditNacionId] = useState(registro.nacion_id || '');
   const [editStatus, setEditStatus] = useState(registro.status);
+  const [editTipo, setEditTipo] = useState((registro as any).tipo || 'Encuentrista');
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -250,9 +252,19 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     if (!editNombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
     setLoading(true);
     try {
+      const updateData: any = { nombre: editNombre.trim(), telefono: editTelefono.trim() || null, correo: editCorreo.trim() || null, nacion_id: editNacionId || null, status: editStatus };
+      if (esEncuentro) {
+        updateData.tipo = editTipo;
+        if (editTipo === 'Servidor') {
+          updateData.precio_boleto = 150;
+          updateData.monto_total = 150;
+          updateData.monto_pagado = 150;
+          updateData.status = 'liquidado';
+        }
+      }
       const { error } = await supabase
         .from('registros')
-        .update({ nombre: editNombre.trim(), telefono: editTelefono.trim() || null, correo: editCorreo.trim() || null, nacion_id: editNacionId || null, status: editStatus })
+        .update(updateData)
         .eq('id', registro.id);
       if (error) throw error;
       addToast('success', 'Registro actualizado');
@@ -428,6 +440,20 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     ))}
                   </div>
                 </div>
+                {esEncuentro && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['Encuentrista', 'Servidor'].map(t => (
+                        <button key={t} onClick={() => { setEditTipo(t); if (t === 'Servidor') setEditStatus('liquidado'); }}
+                          className={`px-3 py-2 rounded-lg text-sm border transition-all ${editTipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                          style={editTipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                          {t === 'Servidor' ? '⭐ Servidor ($150)' : '👤 Encuentrista'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <button onClick={handleEdit} disabled={loading} className="w-full py-3 rounded-lg font-bold text-white disabled:opacity-40"
                   style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                   {loading ? 'Guardando...' : 'Guardar cambios'}

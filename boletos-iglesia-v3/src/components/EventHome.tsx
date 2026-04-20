@@ -602,7 +602,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                         className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                     </div>
                   )}
-                  {evento.slug === 'encuentro' && !isFreeEvent && (
+                  {evento.slug?.toLowerCase().includes('encuentro') && !isFreeEvent && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -860,12 +860,12 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'registros' && !selectedRegistro && (
           <RegistrosList registros={regularRegistros} naciones={naciones} equipos={equipos}
             onSelect={userRole === 'dueno' ? () => {} : setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug === 'encuentro'} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} />
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug?.toLowerCase().includes('encuentro')} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} />
         )}
 
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 
@@ -1002,7 +1002,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
 
         {tab === 'conferencistas' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
       </main>

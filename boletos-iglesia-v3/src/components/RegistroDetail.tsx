@@ -28,6 +28,11 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [referencia, setReferencia] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Split payment (pago mixto)
+  const [splitPago, setSplitPago] = useState(false);
+  const [metodoPago2, setMetodoPago2] = useState<MetodoPago>('transferencia');
+  const [montoAbono2, setMontoAbono2] = useState('');
+
   // Edit mode
   const [editing, setEditing] = useState(false);
   const [editNombre, setEditNombre] = useState(registro.nombre);
@@ -138,7 +143,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const canAssignSeat = tieneAsientos && isLiquidado && !hasAsiento;
 
   // Will this abono liquidate the ticket?
-  const abonoAmount = parseFloat(montoAbono) || 0;
+  const abonoAmount = (parseFloat(montoAbono) || 0) + (splitPago ? (parseFloat(montoAbono2) || 0) : 0);
   const willLiquidate = abonoAmount > 0 && abonoAmount >= saldo && !hasAsiento && tieneAsientos;
 
   const handleSeatClickForAssign = (seatId: string) => {
@@ -198,15 +203,18 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   };
 
   const handleAbono = async () => {
-    const monto = parseFloat(montoAbono);
-    if (!monto || monto <= 0) { addToast('error', 'Ingresa un monto válido'); return; }
-    if (monto > saldo) { addToast('error', 'El abono no puede ser mayor al saldo'); return; }
+    const monto1 = parseFloat(montoAbono);
+    const monto2 = splitPago ? (parseFloat(montoAbono2) || 0) : 0;
+    const montoTotal = splitPago ? monto1 + monto2 : monto1;
 
-    const newPagado = Number(registro.monto_pagado) + monto;
+    if (!monto1 || monto1 <= 0) { addToast('error', 'Ingresa un monto válido'); return; }
+    if (splitPago && monto2 <= 0) { addToast('error', 'Ingresa el monto del segundo método de pago'); return; }
+    if (montoTotal > saldo) { addToast('error', 'El abono no puede ser mayor al saldo'); return; }
+
+    const newPagado = Number(registro.monto_pagado) + montoTotal;
     const newStatus = newPagado >= Number(registro.monto_total) ? 'liquidado' : 'abono';
     const isLiquidating = newStatus === 'liquidado';
 
-    // If liquidating and has seats but none selected, require selection
     if (isLiquidating && tieneAsientos && !hasAsiento && selectedSeatForAssign.length === 0) {
       addToast('error', 'Selecciona un asiento en el mapa antes de liquidar');
       return;
@@ -214,16 +222,24 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
 
     setLoading(true);
     try {
+      // Insert first payment
       const { error: payError } = await supabase
         .from('pagos')
-        .insert({ registro_id: registro.id, monto, metodo_pago: metodoPago, referencia: referencia.trim() || null });
+        .insert({ registro_id: registro.id, monto: monto1, metodo_pago: metodoPago, referencia: referencia.trim() || null });
       if (payError) throw payError;
+
+      // Insert second payment if split mode
+      if (splitPago && monto2 > 0) {
+        const { error: pay2Error } = await supabase
+          .from('pagos')
+          .insert({ registro_id: registro.id, monto: monto2, metodo_pago: metodoPago2, referencia: null });
+        if (pay2Error) throw pay2Error;
+      }
 
       const { error: regError } = await supabase
         .from('registros').update({ monto_pagado: newPagado, status: newStatus }).eq('id', registro.id);
       if (regError) throw regError;
 
-      // Assign seat if liquidating
       if (isLiquidating && tieneAsientos && selectedSeatForAssign.length > 0) {
         const { error: seatError } = await supabase
           .from('asientos').update({ estado: 'ocupado', registro_id: registro.id }).in('id', selectedSeatForAssign);
@@ -235,13 +251,17 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
       }
 
       const seatMsg = selectedSeatForAssign.length > 0 ? ` Asiento: ${selectedSeatForAssign.join(', ')}` : '';
-      addToast('success', `Abono de $${monto.toLocaleString()} registrado. ${isLiquidating ? `¡Boleto liquidado!${seatMsg}` : ''}`);
+      const payDesc = splitPago
+        ? `$${monto1.toLocaleString()} ${metodoPago} + $${monto2.toLocaleString()} ${metodoPago2}`
+        : `$${montoTotal.toLocaleString()} ${metodoPago}`;
+      addToast('success', `Abono de ${payDesc} registrado. ${isLiquidating ? `¡Boleto liquidado!${seatMsg}` : ''}`);
 
       if (user) {
         await logActivity({ userId: user.id, userName: user.nombre, action: 'pago_registrado',
-          detail: `$${monto.toLocaleString()} ${metodoPago} — ${registro.nombre}${isLiquidating ? ' (LIQUIDADO)' : ''}${seatMsg}`,
+          detail: `${payDesc} — ${registro.nombre}${isLiquidating ? ' (LIQUIDADO)' : ''}${seatMsg}`,
           eventoId: registro.evento_id || undefined, registroId: registro.id });
-      }      setMontoAbono(''); setReferencia(''); setSelectedSeatForAssign([]);
+      }
+      setMontoAbono(''); setMontoAbono2(''); setReferencia(''); setSelectedSeatForAssign([]); setSplitPago(false);
       onRefresh(); onBack();
     } catch (error: any) {
       addToast('error', `Error: ${error.message}`);
@@ -635,8 +655,12 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Saldo pendiente</label>
                     <div className="text-2xl font-bold text-amber-400">${saldo.toLocaleString()}</div>
                   </div>
+
+                  {/* Method 1 */}
                   <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {splitPago ? 'Método 1' : 'Método de pago'}
+                    </label>
                     <div className="grid grid-cols-2 gap-2">
                       {METODOS_PAGO.map(m => (
                         <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
@@ -647,15 +671,69 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       ))}
                     </div>
                   </div>
+
                   <div>
-                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto del abono</label>
+                    <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {splitPago ? 'Monto método 1' : 'Monto del abono'}
+                    </label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
-                      <input type="number" value={montoAbono} onChange={e => setMontoAbono(e.target.value)} placeholder={saldo.toString()}
+                      <input type="number" value={montoAbono} onChange={e => setMontoAbono(e.target.value)}
+                        placeholder={splitPago ? '0' : saldo.toString()}
                         className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                     </div>
-                    <button onClick={() => setMontoAbono(saldo.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Liquidar total</button>
+                    {!splitPago && (
+                      <button onClick={() => setMontoAbono(saldo.toString())} className="text-xs underline mt-1" style={{ color: 'var(--color-accent)' }}>Liquidar total</button>
+                    )}
                   </div>
+
+                  {/* Toggle pago mixto */}
+                  <button
+                    onClick={() => { setSplitPago(p => !p); setMontoAbono2(''); }}
+                    className="w-full py-2 rounded-lg text-xs border transition-all flex items-center justify-center gap-2"
+                    style={{
+                      borderColor: splitPago ? 'var(--color-accent)' : 'var(--color-border)',
+                      color: splitPago ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                      background: splitPago ? 'rgba(0,188,212,0.08)' : 'transparent',
+                    }}>
+                    <span>{splitPago ? '✓' : '+'}</span>
+                    {splitPago ? 'Pago mixto activo — quitar segundo método' : 'Dividir entre dos métodos de pago'}
+                  </button>
+
+                  {/* Method 2 — only when split is on */}
+                  {splitPago && (
+                    <>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método 2</label>
+                        <div className="grid grid-cols-2 gap-2">
+                          {METODOS_PAGO.map(m => (
+                            <button key={m.value} onClick={() => setMetodoPago2(m.value as MetodoPago)}
+                              className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago2 === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                              style={metodoPago2 === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                              {m.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto método 2</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                          <input type="number" value={montoAbono2} onChange={e => setMontoAbono2(e.target.value)} placeholder="0"
+                            className="w-full pl-7 pr-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                        </div>
+                      </div>
+                      {/* Total summary */}
+                      {(parseFloat(montoAbono) || 0) + (parseFloat(montoAbono2) || 0) > 0 && (
+                        <div className="rounded-lg p-3 text-xs flex justify-between items-center" style={{ background: 'rgba(0,188,212,0.06)', border: '1px solid rgba(0,188,212,0.15)' }}>
+                          <span style={{ color: 'var(--color-text-muted)' }}>Total a cobrar</span>
+                          <span className="font-bold" style={{ color: 'var(--color-accent)' }}>
+                            ${((parseFloat(montoAbono) || 0) + (parseFloat(montoAbono2) || 0)).toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
 
                   {/* Hint that map is below */}
                   {willLiquidate && (
@@ -676,12 +754,12 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <input type="text" value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="# de transferencia, etc."
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
-                  <button onClick={handleAbono} disabled={loading || !montoAbono}
+                  <button onClick={handleAbono} disabled={loading || !montoAbono || (splitPago && !montoAbono2)}
                     className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
                     style={{ background: willLiquidate ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                     {loading ? 'Procesando...' : willLiquidate
                       ? `Liquidar y Asignar ${selectedSeatForAssign.length > 0 ? selectedSeatForAssign.join(', ') : 'Asiento'}`
-                      : `Registrar Abono de $${(parseFloat(montoAbono) || 0).toLocaleString()}`}
+                      : `Registrar Abono de $${abonoAmount.toLocaleString()}`}
                   </button>
                 </div>
               </div>

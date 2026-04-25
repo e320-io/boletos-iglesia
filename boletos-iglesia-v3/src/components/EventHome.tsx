@@ -12,10 +12,11 @@ import SeatMap from '@/components/SeatMap';
 import RegistrosList from '@/components/RegistrosList';
 import RegistroDetail from '@/components/RegistroDetail';
 import Dashboard from '@/components/Dashboard';
+import EstadoFinanciero from '@/components/EstadoFinanciero';
 import Toast from '@/components/Toast';
 import CorteDeCajaModal from '@/components/CorteDeCajaModal';
 
-type Tab = 'nuevo' | 'registros' | 'dashboard' | 'conferencistas';
+type Tab = 'nuevo' | 'registros' | 'dashboard' | 'financiero' | 'conferencistas';
 
 interface ToastMessage {
   id: number;
@@ -430,6 +431,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                 className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'dashboard' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
                 style={tab === 'dashboard' ? { background: 'var(--color-accent)' } : {}}>
                 📊 Dashboard
+              </button>
+            )}
+            {canSeeDashboard && !isFreeEvent && (
+              <button onClick={() => { setTab('financiero'); setSelectedRegistro(null); }}
+                className={`px-5 py-2 rounded-md text-sm font-medium transition-all ${tab === 'financiero' ? 'text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                style={tab === 'financiero' ? { background: 'var(--color-accent)' } : {}}>
+                💰 Financiero
               </button>
             )}
             {userRole === 'admin' && evento.tiene_asientos && hasConfSeats && (
@@ -870,7 +878,11 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         )}
 
         {tab === 'dashboard' && (
-          <Dashboard registros={regularRegistros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} />
+          <Dashboard registros={regularRegistros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} isEncuentro={evento.slug?.toLowerCase().includes('encuentro')} />
+        )}
+
+        {tab === 'financiero' && (
+          <EstadoFinanciero registros={regularRegistros} eventoId={evento.id} eventoNombre={evento.nombre} />
         )}
 
         {tab === 'conferencistas' && !selectedRegistro && (

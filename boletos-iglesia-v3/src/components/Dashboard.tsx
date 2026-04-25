@@ -216,14 +216,16 @@ interface Props {
   eventoNombre?: string;
   isFreeEvent?: boolean;
   equipos?: any[];
+  isEncuentro?: boolean;
 }
 
-export default function Dashboard({ registros: allRegistros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [] }: Props) {
+export default function Dashboard({ registros: allRegistros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [], isEncuentro = false }: Props) {
   const [filterMode, setFilterMode] = useState<'all' | 'week'>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [expandedEquipo, setExpandedEquipo] = useState<string | null>(null);
   const [showChart, setShowChart] = useState(false);
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false);
+  const [noVinieroExpanded, setNoVinieroExpanded] = useState(false);
 
   // Exclude conferencistas from all dashboard stats
   const registros = allRegistros.filter(r => (r as any).tipo !== 'conferencista');
@@ -443,6 +445,95 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
           </div>
         )}
       </div>
+
+      {/* Encuentro: Asistencia Día 1 */}
+      {isEncuentro && (() => {
+        const encuentristas = registros.filter(r => r.tipo === 'Encuentrista');
+        const servidores = registros.filter(r => r.tipo === 'Servidor');
+        const encuentristasCheckin = encuentristas.filter(r => r.checked_in).length;
+        const servidoresCheckin = servidores.filter(r => r.checked_in).length;
+        const noVinieron = registros.filter(r =>
+          (r.status === 'abono' || r.status === 'liquidado') && !r.checked_in
+        );
+        return (
+          <div className="rounded-xl border overflow-hidden" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="px-6 pt-5 pb-4">
+              <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Asistencia Día 1</h3>
+              <div className="grid grid-cols-3 gap-3">
+                {/* Encuentristas */}
+                <div className="rounded-xl p-4 border text-center" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                  <div className="text-3xl font-bold text-sky-400" style={{ fontFamily: 'var(--font-display)' }}>
+                    {encuentristasCheckin}
+                    <span className="text-base font-normal text-slate-500 ml-1">/ {encuentristas.length}</span>
+                  </div>
+                  <div className="text-xs mt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>Encuentristas</div>
+                  <div className="text-[10px] mt-0.5 text-sky-400/70">con check-in</div>
+                </div>
+                {/* Servidores */}
+                <div className="rounded-xl p-4 border text-center" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                  <div className="text-3xl font-bold text-violet-400" style={{ fontFamily: 'var(--font-display)' }}>
+                    {servidoresCheckin}
+                    <span className="text-base font-normal text-slate-500 ml-1">/ {servidores.length}</span>
+                  </div>
+                  <div className="text-xs mt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>Servidores</div>
+                  <div className="text-[10px] mt-0.5 text-violet-400/70">con check-in</div>
+                </div>
+                {/* No vinieron */}
+                <div className="rounded-xl p-4 border text-center" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                  <div className="text-3xl font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }}>
+                    {noVinieron.length}
+                  </div>
+                  <div className="text-xs mt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>No se presentaron</div>
+                  <div className="text-[10px] mt-0.5 text-amber-400/70">abono o liquidado sin check-in</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Collapsible: quiénes no vinieron */}
+            {noVinieron.length > 0 && (
+              <div>
+                <button
+                  className="w-full flex items-center justify-between px-6 py-3 text-xs font-medium transition-colors hover:bg-white/5 border-t"
+                  style={{ color: 'var(--color-text-muted)', borderColor: 'var(--color-border)' }}
+                  onClick={() => setNoVinieroExpanded(v => !v)}
+                >
+                  <span className="text-amber-400/80">
+                    Ver quiénes no se presentaron ({noVinieron.length})
+                  </span>
+                  <span className="text-slate-500">{noVinieroExpanded ? '▲ ocultar' : '▼ mostrar'}</span>
+                </button>
+                {noVinieroExpanded && (
+                  <div className="border-t divide-y divide-white/5" style={{ borderColor: 'var(--color-border)' }}>
+                    {noVinieron.map(r => (
+                      <div key={r.id} className="flex items-center justify-between px-6 py-2.5" style={{ background: 'var(--color-bg)' }}>
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="font-medium text-sm truncate">{r.nombre}</span>
+                          {r.tipo && r.tipo !== 'general' && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${r.tipo === 'Servidor' ? 'bg-violet-500/20 text-violet-400' : 'bg-sky-500/20 text-sky-400'}`}>
+                              {r.tipo}
+                            </span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0 text-xs">
+                          <span className={`px-2 py-0.5 rounded-full font-medium ${r.status === 'liquidado' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
+                            {r.status === 'liquidado' ? 'Liquidado' : 'Abono'}
+                          </span>
+                          <span className="font-bold" style={{ color: 'var(--color-accent)' }}>
+                            ${Number(r.monto_pagado).toLocaleString()}
+                            {r.status !== 'liquidado' && (
+                              <span className="text-slate-500 font-normal"> / ${Number(r.monto_total).toLocaleString()}</span>
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* Cobranza progress */}
       <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>

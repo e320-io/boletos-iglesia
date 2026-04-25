@@ -49,7 +49,19 @@ CREATE TABLE IF NOT EXISTS pagos (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. ÍNDICES
+-- 5. TABLA: Gastos por evento (para estado financiero)
+CREATE TABLE IF NOT EXISTS gastos_evento (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  evento_id UUID NOT NULL,
+  concepto TEXT NOT NULL,
+  monto NUMERIC(10,2) NOT NULL,
+  metodo_pago TEXT NOT NULL CHECK (metodo_pago IN ('efectivo', 'transferencia', 'tarjeta', 'otro')),
+  fecha DATE,
+  notas TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 6. ÍNDICES
 CREATE INDEX idx_registros_nacion ON registros(nacion_id);
 CREATE INDEX idx_registros_status ON registros(status);
 CREATE INDEX idx_asientos_estado ON asientos(estado);

@@ -63,6 +63,17 @@ export interface Pago {
 
 export type MetodoPago = Pago['metodo_pago'];
 
+export interface GastoEvento {
+  id: string;
+  evento_id: string;
+  concepto: string;
+  monto: number;
+  metodo_pago: 'efectivo' | 'transferencia' | 'tarjeta' | 'otro';
+  fecha: string | null;
+  notas: string | null;
+  created_at: string;
+}
+
 export interface RegistroFormData {
   nombre: string;
   telefono: string;

@@ -32,6 +32,17 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const [filterCheckIn, setFilterCheckIn] = useState<string>('todos');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [showCorte, setShowCorte] = useState(false);
+  const [showColumnas, setShowColumnas] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
+    telefono: false,
+    correo: false,
+    tipo: true,
+    grupo: true,
+    status: true,
+    pagado: true,
+    saldo: true,
+  });
+  const toggleColumn = (col: string) => setVisibleColumns(prev => ({ ...prev, [col]: !prev[col] }));
 
   const hasEquipos = equipos.length > 0;
   // Conferencistas have their own tab; exclude them from the main list
@@ -178,6 +189,36 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             💰 Corte de caja
           </button>
         )}
+        <div className="relative">
+          <button onClick={() => setShowColumnas(!showColumnas)}
+            className={`px-4 py-2.5 rounded-lg text-sm border transition-all ${showColumnas ? 'border-violet-500 text-white' : 'text-slate-400 hover:text-white'}`}
+            style={showColumnas ? { background: 'rgba(139,92,246,0.15)', borderColor: '#8b5cf6' } : { borderColor: 'var(--color-border)' }}>
+            🗂 Columnas
+          </button>
+          {showColumnas && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setShowColumnas(false)} />
+              <div className="absolute left-0 top-full mt-2 z-50 rounded-xl border p-3 min-w-[200px] shadow-xl"
+              style={{ background: 'var(--color-surface)', borderColor: '#8b5cf6' }}>
+              <p className="text-xs font-semibold mb-2 uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>Columnas visibles</p>
+              {[
+                { key: 'telefono', label: 'Teléfono' },
+                { key: 'correo', label: 'Correo' },
+                ...(hasTipos ? [{ key: 'tipo', label: 'Tipo' }] : []),
+                { key: 'grupo', label: hasEquipos ? 'Equipo' : 'Nación' },
+                ...(!isFreeEvent ? [{ key: 'status', label: 'Status' }] : []),
+                ...(canSeeMoney ? [{ key: 'pagado', label: 'Pagado' }, { key: 'saldo', label: 'Saldo' }] : []),
+              ].map(col => (
+                <label key={col.key} className="flex items-center gap-2 py-1.5 cursor-pointer hover:text-white transition-colors text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                  <input type="checkbox" checked={visibleColumns[col.key]} onChange={() => toggleColumn(col.key)}
+                    className="accent-violet-500 w-3.5 h-3.5" />
+                  {col.label}
+                </label>
+              ))}
+            </div>
+            </>
+          )}
+        </div>
         <button onClick={async () => {
           addToast?.('info', 'Generando PDF...');
           try {
@@ -217,21 +258,27 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             doc.text(`Total: ${filtered.length} registros`, 14, 39);
             doc.setTextColor(0, 0, 0);
 
-            // Table data
+            // Table data — driven by visibleColumns
+            const headRow: string[] = ['#', 'Nombre'];
+            if (visibleColumns.telefono) headRow.push('Teléfono');
+            if (visibleColumns.correo) headRow.push('Correo');
+            if (hasTipos && visibleColumns.tipo) headRow.push('Tipo');
+            if (visibleColumns.grupo) headRow.push(hasEquipos ? 'Equipo' : 'Nación');
+            if (!isFreeEvent && visibleColumns.status) headRow.push('Status');
+            if (canSeeMoney && visibleColumns.pagado) headRow.push('Pagado');
+            if (canSeeMoney && visibleColumns.saldo) headRow.push('Saldo');
+
             const tableData = filtered.map((r, i) => {
-              const grupoCampo = hasEquipos
-                ? ((r as any).equipo?.nombre || '—')
-                : ((r as any).nacion?.nombre || '—');
-              const tipo = (r as any).tipo || 'general';
-              const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1);
-              const row = [(i + 1).toString(), r.nombre, grupoCampo, statusLabel];
-              if (hasTipos) row.splice(3, 0, tipo);
+              const row: string[] = [(i + 1).toString(), r.nombre];
+              if (visibleColumns.telefono) row.push(r.telefono || '—');
+              if (visibleColumns.correo) row.push(r.correo || '—');
+              if (hasTipos && visibleColumns.tipo) row.push((r as any).tipo || 'general');
+              if (visibleColumns.grupo) row.push(hasEquipos ? ((r as any).equipo?.nombre || '—') : ((r as any).nacion?.nombre || '—'));
+              if (!isFreeEvent && visibleColumns.status) row.push(r.status.charAt(0).toUpperCase() + r.status.slice(1));
+              if (canSeeMoney && visibleColumns.pagado) row.push(`$${Number(r.monto_pagado).toLocaleString()}`);
+              if (canSeeMoney && visibleColumns.saldo) row.push(`$${(Number(r.monto_total) - Number(r.monto_pagado)).toLocaleString()}`);
               return row;
             });
-
-            const headRow = ['#', 'Nombre', hasEquipos ? 'Equipo' : 'Nación'];
-            if (hasTipos) headRow.push('Tipo');
-            headRow.push('Status');
 
             // AutoTable
             (doc as any).autoTable({
@@ -248,13 +295,6 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               bodyStyles: {
                 fontSize: 8,
                 cellPadding: 3,
-              },
-              columnStyles: {
-                0: { cellWidth: 12, halign: 'center' },
-                1: { cellWidth: 65 },
-                2: { cellWidth: 55 },
-                3: { cellWidth: 28 },
-                4: { cellWidth: 25, halign: 'center' },
               },
               alternateRowStyles: {
                 fillColor: [245, 247, 250],
@@ -435,14 +475,16 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#10b981' }}>{showCheckIn2 ? 'Día 1' : 'Check-in'}</th>}
               {showCheckIn2 && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nombre</th>
-              {hasTipos && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
-              {hasEquipos
+              {visibleColumns.telefono && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Teléfono</th>}
+              {visibleColumns.correo && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Correo</th>}
+              {hasTipos && visibleColumns.tipo && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
+              {visibleColumns.grupo && (hasEquipos
                 ? <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Equipo</th>
                 : <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
-              }
-              {!isFreeEvent && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>}
-              {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>}
-              {canSeeMoney && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>}
+              )}
+              {!isFreeEvent && visibleColumns.status && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Status</th>}
+              {canSeeMoney && visibleColumns.pagado && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Pagado</th>}
+              {canSeeMoney && visibleColumns.saldo && <th className="text-right px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Saldo</th>}
             </tr>
           </thead>
           <tbody>
@@ -469,14 +511,16 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                     </td>
                   )}
                   <td className="px-4 py-3 font-medium">{r.nombre}</td>
-                  {hasTipos && (
+                  {visibleColumns.telefono && <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>{r.telefono || '—'}</td>}
+                  {visibleColumns.correo && <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>{r.correo || '—'}</td>}
+                  {hasTipos && visibleColumns.tipo && (
                     <td className="px-4 py-3">
                       <span className={`text-xs px-2 py-0.5 rounded-full ${(r as any).tipo === 'Servidor' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-500/20 text-slate-400'}`}>
                         {(r as any).tipo || 'general'}
                       </span>
                     </td>
                   )}
-                  {hasEquipos ? (
+                  {visibleColumns.grupo && (hasEquipos ? (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).equipo?.color || '#666' }} />
@@ -490,14 +534,14 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                         <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).nacion?.nombre || '—'}</span>
                       </div>
                     </td>
-                  )}
-                  {!isFreeEvent && (
+                  ))}
+                  {!isFreeEvent && visibleColumns.status && (
                     <td className="px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-[10px] font-bold border ${statusColors[r.status]}`}>{statusLabels[r.status]}</span>
                     </td>
                   )}
-                  {canSeeMoney && <td className="px-4 py-3 text-right font-medium" style={blurStyle}>${Number(r.monto_pagado).toLocaleString()}</td>}
-                  {canSeeMoney && (
+                  {canSeeMoney && visibleColumns.pagado && <td className="px-4 py-3 text-right font-medium" style={blurStyle}>${Number(r.monto_pagado).toLocaleString()}</td>}
+                  {canSeeMoney && visibleColumns.saldo && (
                     <td className="px-4 py-3 text-right" style={blurStyle}>
                       {saldo > 0 ? <span className="text-amber-400 font-medium">${saldo.toLocaleString()}</span> : <span className="text-emerald-400">$0</span>}
                     </td>

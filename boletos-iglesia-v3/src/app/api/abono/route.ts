@@ -49,3 +49,26 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const supabase = createServerClient();
+
+    const { pago_id, metodo_pago, referencia } = body;
+
+    if (!pago_id || !metodo_pago) {
+      return NextResponse.json({ error: 'Datos inválidos' }, { status: 400 });
+    }
+
+    const updates: Record<string, string> = { metodo_pago };
+    if (referencia !== undefined) updates.referencia = referencia;
+
+    const { error } = await supabase.from('pagos').update(updates).eq('id', pago_id);
+    if (error) throw error;
+
+    return NextResponse.json({ status: 'ok' });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}

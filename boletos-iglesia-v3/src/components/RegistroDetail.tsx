@@ -49,6 +49,11 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [editPaymentDate, setEditPaymentDate] = useState('');
 
+  // Edit payment method
+  const [editingMethodId, setEditingMethodId] = useState<string | null>(null);
+  const [editMethodValue, setEditMethodValue] = useState<MetodoPago>('efectivo');
+  const [editMethodRef, setEditMethodRef] = useState('');
+
   // Seat assignment
   const [selectedSeatForAssign, setSelectedSeatForAssign] = useState<string[]>([]);
   const [changingSeat, setChangingSeat] = useState(false);
@@ -604,37 +609,90 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
               ) : (
                 <div className="space-y-3">
                   {pagos.map((p: any) => (
-                    <div key={p.id} className="flex items-center justify-between py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
-                      <div>
-                        <div className="text-sm font-medium">{metodoPagoLabels[p.metodo_pago]}</div>
-                        {editingPaymentId === p.id ? (
-                          <div className="flex items-center gap-2 mt-1">
-                            <input type="date" value={editPaymentDate}
-                              onChange={e => setEditPaymentDate(e.target.value)}
-                              className="px-2 py-1 rounded text-xs border bg-transparent"
-                              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                            <button onClick={async () => {
-                              if (!editPaymentDate) return;
-                              const newDate = new Date(editPaymentDate + 'T12:00:00').toISOString();
-                              await supabase.from('pagos').update({ created_at: newDate }).eq('id', p.id);
-                              setEditingPaymentId(null);
-                              onRefresh(); onBack();
-                            }} className="text-xs px-2 py-1 rounded bg-emerald-500 text-white">Guardar</button>
-                            <button onClick={() => setEditingPaymentId(null)}
-                              className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
-                          </div>
-                        ) : (
-                          <div className="text-xs flex items-center gap-2" style={{ color: 'var(--color-text-muted)' }}>
-                            {new Date(p.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
-                            {p.referencia && ` · Ref: ${p.referencia}`}
-                            <button onClick={() => {
-                              setEditingPaymentId(p.id);
-                              setEditPaymentDate(new Date(p.created_at).toISOString().split('T')[0]);
-                            }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar fecha</button>
-                          </div>
-                        )}
+                    <div key={p.id} className="py-3 border-b" style={{ borderColor: 'var(--color-border)' }}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          {editingMethodId === p.id ? (
+                            <div className="space-y-2">
+                              <div className="grid grid-cols-3 gap-1.5">
+                                {METODOS_PAGO.map(m => (
+                                  <button key={m.value} onClick={() => setEditMethodValue(m.value as MetodoPago)}
+                                    className={`px-2 py-1.5 rounded text-xs border transition-all ${editMethodValue === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                                    style={editMethodValue === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                                    {m.icon} {m.label}
+                                  </button>
+                                ))}
+                              </div>
+                              <input
+                                type="text"
+                                value={editMethodRef}
+                                onChange={e => setEditMethodRef(e.target.value)}
+                                placeholder="Referencia (opcional)"
+                                className="w-full px-2 py-1 rounded text-xs border bg-transparent"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+                              />
+                              <div className="flex gap-2">
+                                <button onClick={async () => {
+                                  const res = await fetch('/api/abono', {
+                                    method: 'PATCH',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ pago_id: p.id, metodo_pago: editMethodValue, referencia: editMethodRef || null }),
+                                  });
+                                  if (res.ok) {
+                                    setEditingMethodId(null);
+                                    addToast('success', 'Método de pago actualizado');
+                                    onRefresh(); onBack();
+                                  } else {
+                                    addToast('error', 'Error al actualizar');
+                                  }
+                                }} className="text-xs px-2 py-1 rounded bg-emerald-500 text-white">Guardar</button>
+                                <button onClick={() => setEditingMethodId(null)}
+                                  className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="text-sm font-medium">{metodoPagoLabels[p.metodo_pago]}</div>
+                          )}
+                          {editingPaymentId === p.id ? (
+                            <div className="flex items-center gap-2 mt-1">
+                              <input type="date" value={editPaymentDate}
+                                onChange={e => setEditPaymentDate(e.target.value)}
+                                className="px-2 py-1 rounded text-xs border bg-transparent"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                              <button onClick={async () => {
+                                if (!editPaymentDate) return;
+                                const newDate = new Date(editPaymentDate + 'T12:00:00').toISOString();
+                                await supabase.from('pagos').update({ created_at: newDate }).eq('id', p.id);
+                                setEditingPaymentId(null);
+                                onRefresh(); onBack();
+                              }} className="text-xs px-2 py-1 rounded bg-emerald-500 text-white">Guardar</button>
+                              <button onClick={() => setEditingPaymentId(null)}
+                                className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
+                            </div>
+                          ) : (
+                            <div className="text-xs flex items-center gap-2 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                              {new Date(p.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
+                              {p.referencia && ` · Ref: ${p.referencia}`}
+                              {editingMethodId !== p.id && (
+                                <>
+                                  <button onClick={() => {
+                                    setEditingPaymentId(p.id);
+                                    setEditPaymentDate(new Date(p.created_at).toISOString().split('T')[0]);
+                                    setEditingMethodId(null);
+                                  }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar fecha</button>
+                                  <button onClick={() => {
+                                    setEditingMethodId(p.id);
+                                    setEditMethodValue(p.metodo_pago as MetodoPago);
+                                    setEditMethodRef(p.referencia || '');
+                                    setEditingPaymentId(null);
+                                  }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar método</button>
+                                </>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                        <div className="text-lg font-bold text-emerald-400">+${Number(p.monto).toLocaleString()}</div>
                       </div>
-                      <div className="text-lg font-bold text-emerald-400">+${Number(p.monto).toLocaleString()}</div>
                     </div>
                   ))}
                 </div>

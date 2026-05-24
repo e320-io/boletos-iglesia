@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 interface EventoCorte {
   id: string;
@@ -13,33 +13,54 @@ interface EventoCorte {
   otro: number;
 }
 
+const REFRESH_INTERVAL = 30_000; // 30 segundos
+
 export default function CorteDeCajaModal({ onClose }: { onClose: () => void }) {
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [eventos, setEventos] = useState<EventoCorte[]>([]);
   const [fecha, setFecha] = useState('');
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchData = useCallback(async (isManual = false) => {
+    if (isManual) setRefreshing(true);
+    try {
+      const r = await fetch(`/api/corte-de-caja?t=${Date.now()}`, { cache: 'no-store' });
+      const data = await r.json();
+      if (data.error) {
+        setError(data.error);
+      } else {
+        setEventos(data.eventos || []);
+        setFecha(data.fecha || '');
+        setError('');
+        setLastUpdated(new Date());
+      }
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch('/api/corte-de-caja')
-      .then(r => r.json())
-      .then(data => {
-        if (data.error) {
-          setError(data.error);
-        } else {
-          setEventos(data.eventos || []);
-          setFecha(data.fecha || '');
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        setError(err.message);
-        setLoading(false);
-      });
-  }, []);
+    fetchData();
+
+    timerRef.current = setInterval(() => fetchData(), REFRESH_INTERVAL);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [fetchData]);
 
   const fechaFormateada = fecha
     ? new Date(fecha + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' })
+    : '';
+
+  const lastUpdatedStr = lastUpdated
+    ? lastUpdated.toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
     : '';
 
   function generateWhatsAppText(): string {
@@ -77,7 +98,7 @@ export default function CorteDeCajaModal({ onClose }: { onClose: () => void }) {
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
     } catch {
-      // clipboard not available — fallback: select text
+      // clipboard not available
     }
   }
 
@@ -101,13 +122,24 @@ export default function CorteDeCajaModal({ onClose }: { onClose: () => void }) {
               <p className="text-xs mt-0.5 capitalize" style={{ color: 'var(--color-text-muted)' }}>{fechaFormateada}</p>
             )}
           </div>
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-lg text-xl transition-opacity opacity-50 hover:opacity-100"
-            style={{ color: 'var(--color-text)' }}
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => fetchData(true)}
+              disabled={refreshing}
+              title="Actualizar"
+              className="w-8 h-8 flex items-center justify-center rounded-lg transition-opacity opacity-60 hover:opacity-100 disabled:opacity-30"
+              style={{ color: 'var(--color-accent)' }}
+            >
+              {refreshing ? '⏳' : '🔄'}
+            </button>
+            <button
+              onClick={onClose}
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-xl transition-opacity opacity-50 hover:opacity-100"
+              style={{ color: 'var(--color-text)' }}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         <div className="p-6">
@@ -157,6 +189,13 @@ export default function CorteDeCajaModal({ onClose }: { onClose: () => void }) {
                   </div>
                 </div>
               </div>
+
+              {/* Last updated */}
+              {lastUpdatedStr && (
+                <p className="text-xs text-center mb-3" style={{ color: 'var(--color-text-muted)' }}>
+                  Actualizado a las {lastUpdatedStr} · se actualiza cada 30 s
+                </p>
+              )}
 
               {/* Preview text */}
               <div

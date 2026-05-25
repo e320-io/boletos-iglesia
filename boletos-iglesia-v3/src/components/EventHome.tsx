@@ -13,6 +13,7 @@ import RegistrosList from '@/components/RegistrosList';
 import RegistroDetail from '@/components/RegistroDetail';
 import Dashboard from '@/components/Dashboard';
 import EstadoFinanciero from '@/components/EstadoFinanciero';
+import { MetodoPagoSelector } from '@/components/MetodoPagoSelector';
 import Toast from '@/components/Toast';
 import CorteDeCajaModal from '@/components/CorteDeCajaModal';
 
@@ -770,15 +771,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
                     {!splitPayment ? (
-                      <div className="grid grid-cols-2 gap-2">
-                        {METODOS_PAGO.map(m => (
-                          <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                            className={`px-3 py-2 rounded-lg text-sm border transition-all ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                            style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                            {m.label}
-                          </button>
-                        ))}
-                      </div>
+                      <MetodoPagoSelector value={metodoPago} onChange={v => setMetodoPago(v)} />
                     ) : (
                       <div className="space-y-2">
                         {splitMontos.map((s, i) => (

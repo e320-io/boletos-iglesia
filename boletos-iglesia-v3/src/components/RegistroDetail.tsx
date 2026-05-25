@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion, Asiento, MetodoPago } from '@/types';
 import SeatMap from '@/components/SeatMap';
 import { seatLabel } from '@/lib/seatLabel';
+import { MetodoPagoSelector } from '@/components/MetodoPagoSelector';
 
 interface Props {
   registro: Registro;
@@ -533,15 +534,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                 <div className="mt-4 pt-4 border-t space-y-4" style={{ borderColor: 'var(--color-border)' }}>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método de pago</label>
-                    <div className="grid grid-cols-4 gap-2">
-                      {METODOS_PAGO.map(m => (
-                        <button key={m.value} onClick={() => setGroupMetodoPago(m.value as MetodoPago)}
-                          className={`px-2 py-1.5 rounded-lg text-xs border transition-all flex items-center gap-1 ${groupMetodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={groupMetodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          <span>{m.icon}</span><span>{m.label}</span>
-                        </button>
-                      ))}
-                    </div>
+                    <MetodoPagoSelector value={groupMetodoPago} onChange={v => setGroupMetodoPago(v)} size="compact" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto para liquidar {grupoSinLiquidar.length} boletos</label>
@@ -719,15 +712,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
                       {splitPago ? 'Método 1' : 'Método de pago'}
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {METODOS_PAGO.map(m => (
-                        <button key={m.value} onClick={() => setMetodoPago(m.value as MetodoPago)}
-                          className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                          style={metodoPago === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
+                    <MetodoPagoSelector value={metodoPago} onChange={v => setMetodoPago(v)} />
                   </div>
 
                   <div>
@@ -763,15 +748,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     <>
                       <div>
                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Método 2</label>
-                        <div className="grid grid-cols-2 gap-2">
-                          {METODOS_PAGO.map(m => (
-                            <button key={m.value} onClick={() => setMetodoPago2(m.value as MetodoPago)}
-                              className={`px-3 py-2 rounded-lg text-sm border transition-all flex items-center gap-2 ${metodoPago2 === m.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                              style={metodoPago2 === m.value ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                              {m.label}
-                            </button>
-                          ))}
-                        </div>
+                        <MetodoPagoSelector value={metodoPago2} onChange={v => setMetodoPago2(v)} />
                       </div>
                       <div>
                         <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Monto método 2</label>

@@ -1,10 +1,11 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import type { MetodoPago } from '@/types';
 
 const METODO_CONFIG: Record<string, {
   label: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   selectedBg: string;
   selectedBorder: string;
   selectedText: string;

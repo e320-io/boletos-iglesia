@@ -107,13 +107,14 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
 
   const handleImageUpload = async (file: File) => {
     setUploadingImg(true);
+    setFormError('');
     try {
-      const ext = file.name.split('.').pop();
-      const path = `flyers/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from('eventos').upload(path, file, { upsert: true });
-      if (error) throw error;
-      const { data } = supabase.storage.from('eventos').getPublicUrl(path);
-      setImagenUrl(data.publicUrl);
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload-imagen', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setImagenUrl(data.url);
     } catch (e: any) {
       setFormError(`Error al subir imagen: ${e.message}`);
     } finally {

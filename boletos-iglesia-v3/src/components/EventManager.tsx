@@ -16,6 +16,7 @@ interface Evento {
   usa_equipos: boolean;
   ministerio: string | null;
   activo: boolean;
+  compra_online: boolean;
 }
 
 interface FasePrecio {
@@ -49,6 +50,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const [tieneAsientos, setTieneAsientos] = useState(false);
   const [usaFasesPrecio, setUsaFasesPrecio] = useState(false);
   const [usaEquipos, setUsaEquipos] = useState(false);
+  const [compraOnline, setCompraOnline] = useState(false);
   const [fases, setFases] = useState<FasePrecio[]>([]);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [formError, setFormError] = useState('');
@@ -70,7 +72,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const resetForm = () => {
     setNombre(''); setSlug(''); setFecha(''); setDescripcion(''); setMinisterio('');
     setEsGratuito(false); setPrecioDefault(550); setTieneAsientos(false);
-    setUsaFasesPrecio(false); setUsaEquipos(false);
+    setUsaFasesPrecio(false); setUsaEquipos(false); setCompraOnline(false);
     setFases([]); setEquipos([]);
     setFormError(''); setFormSuccess('');
   };
@@ -88,6 +90,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     setTieneAsientos(evento.tiene_asientos);
     setUsaFasesPrecio(evento.usa_fases_precio);
     setUsaEquipos(evento.usa_equipos);
+    setCompraOnline(evento.compra_online ?? false);
 
     // Load fases
     const { data: fasesData } = await supabase.from('fases_precio').select('*').eq('evento_id', evento.id).order('fecha_inicio');
@@ -117,6 +120,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
         tiene_asientos: tieneAsientos,
         usa_fases_precio: usaFasesPrecio,
         usa_equipos: usaEquipos,
+        compra_online: compraOnline,
       };
 
       let eventoId: string;
@@ -390,6 +394,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                 { label: '🪑 Asientos enumerados', desc: 'Mapa de asientos con selección', value: tieneAsientos, onChange: (v: boolean) => { setTieneAsientos(v); if (v) setEsGratuito(false); } },
                 { label: '📅 Fases de precio', desc: 'Precio varía por mes/fecha', value: usaFasesPrecio, onChange: (v: boolean) => { setUsaFasesPrecio(v); if (v) setEsGratuito(false); } },
                 { label: '👥 Equipos', desc: 'Usa equipos en vez de naciones', value: usaEquipos, onChange: setUsaEquipos },
+                { label: '🛒 Venta en línea', desc: 'Aparece en la página de compra pública', value: compraOnline, onChange: setCompraOnline },
               ].map(toggle => (
                 <button key={toggle.label} onClick={() => toggle.onChange(!toggle.value)}
                   className={`text-left px-4 py-3 rounded-lg border transition-all ${toggle.value ? 'border-cyan-500' : 'border-slate-700'}`}
@@ -528,6 +533,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                   {e.tiene_asientos && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-400">Asientos</span>}
                   {e.usa_fases_precio && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400">Fases</span>}
                   {e.usa_equipos && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-400">Equipos</span>}
+                  {e.compra_online && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400">🛒 Online</span>}
                   {!e.activo && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400">Inactivo</span>}
                 </div>
                 <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>

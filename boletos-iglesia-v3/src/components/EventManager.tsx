@@ -53,6 +53,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const [usaEquipos, setUsaEquipos] = useState(false);
   const [compraOnline, setCompraOnline] = useState(false);
   const [imagenUrl, setImagenUrl] = useState('');
+  const [uploadingImg, setUploadingImg] = useState(false);
   const [fases, setFases] = useState<FasePrecio[]>([]);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [formError, setFormError] = useState('');
@@ -102,6 +103,22 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     // Load equipos
     const { data: equiposData } = await supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre');
     if (equiposData) setEquipos(equiposData);
+  };
+
+  const handleImageUpload = async (file: File) => {
+    setUploadingImg(true);
+    try {
+      const ext = file.name.split('.').pop();
+      const path = `flyers/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from('eventos').upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data } = supabase.storage.from('eventos').getPublicUrl(path);
+      setImagenUrl(data.publicUrl);
+    } catch (e: any) {
+      setFormError(`Error al subir imagen: ${e.message}`);
+    } finally {
+      setUploadingImg(false);
+    }
   };
 
   const handleSave = async () => {
@@ -387,13 +404,39 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                   style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>URL del flyer / imagen</label>
-                <input type="url" value={imagenUrl} onChange={e => setImagenUrl(e.target.value)}
-                  placeholder="https://... (se muestra en la página de compra)" className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
-                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
-                {imagenUrl && (
-                  <img src={imagenUrl} alt="preview" className="mt-2 rounded-lg" style={{ maxHeight: 120, objectFit: 'cover', width: '100%' }} />
-                )}
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>Flyer / Imagen del evento</label>
+                <div className="flex gap-3 items-start">
+                  {imagenUrl ? (
+                    <div className="relative flex-shrink-0" style={{ width: 120 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={imagenUrl} alt="flyer" className="rounded-lg" style={{ width: 120, height: 80, objectFit: 'cover' }} />
+                      <button onClick={() => setImagenUrl('')} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{ background: '#ef4444', color: '#fff' }}>✕</button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center rounded-lg cursor-pointer transition-all"
+                      style={{ width: 120, height: 80, border: '2px dashed var(--color-border)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                      <input type="file" accept="image/*" className="hidden" disabled={uploadingImg}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleImageUpload(f); e.target.value = ''; }} />
+                      {uploadingImg ? (
+                        <span className="text-xs text-center px-2">Subiendo...</span>
+                      ) : (
+                        <>
+                          <span className="text-2xl mb-1">🖼️</span>
+                          <span className="text-[10px] text-center px-2">Subir imagen</span>
+                        </>
+                      )}
+                    </label>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-xs mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      O pega una URL directamente:
+                    </p>
+                    <input type="url" value={imagenUrl} onChange={e => setImagenUrl(e.target.value)}
+                      placeholder="https://..." className="w-full px-3 py-2 rounded-lg text-xs border bg-transparent"
+                      style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                  </div>
+                </div>
               </div>
             </div>
           </div>

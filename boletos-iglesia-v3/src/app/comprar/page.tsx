@@ -8,6 +8,7 @@ import SeatMap from '@/components/SeatMap';
 interface Evento {
   id: string; nombre: string; slug: string; fecha: string; descripcion: string;
   precio_default: number; tiene_asientos: boolean; es_gratuito: boolean; usa_equipos: boolean;
+  imagen_url?: string | null;
 }
 
 const EVENT_IMAGES: Record<string, string> = {
@@ -67,6 +68,7 @@ export default function ComprarPage() {
 
   const total = (ev?.precio_default||0)*numBoletos;
   const hasEq = equipos.length>0;
+  const evImg = (e: Evento) => e.imagen_url || EVENT_IMAGES[e.slug] || null;
   const fmt = (f:string) => { const d=new Date(f+'T12:00:00'); return { day:d.getDate(), mon:d.toLocaleDateString('es-MX',{month:'short'}).toUpperCase(), full:d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) }; };
   const sl = (id:string) => { const s=asientos.find(a=>a.id===id); return s ? (s.fila==='RE'?`RE-${s.columna}`:`${s.fila}${s.columna}`) : id; };
   const reset = () => { setStep('eventos'); setEv(null); setSelectedSeats([]); setError(''); };
@@ -197,7 +199,7 @@ export default function ComprarPage() {
 
             {loading ? <div style={{textAlign:'center',padding:40,color:'rgba(255,255,255,.3)'}}>Cargando...</div> :
               eventos.filter(e=>!e.es_gratuito&&e.precio_default>0).map((e,i) => {
-                const f=fmt(e.fecha); const img=EVENT_IMAGES[e.slug];
+                const f=fmt(e.fecha); const img=evImg(e);
                 if(img) return (
                   <div key={e.id} className="bp-evcard bp-anim" style={{animationDelay:`${i*.08}s`}} onClick={()=>pick(e)}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -237,10 +239,10 @@ export default function ComprarPage() {
       {ev && step!=='eventos' && (
         <div className="bp-detail">
           {/* Hero */}
-          {EVENT_IMAGES[ev.slug] ? (
+          {evImg(ev) ? (
             <div className="bp-detail-hero">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={EVENT_IMAGES[ev.slug]} alt={ev.nombre} />
+              <img src={evImg(ev)!} alt={ev.nombre} />
               <div className="bp-detail-hero-grad" />
               <button className="bp-detail-back" onClick={reset}>‹</button>
             </div>
@@ -307,23 +309,25 @@ export default function ComprarPage() {
                   <div className="bp-field">
                     <label className="bp-flabel">Escuadrón</label>
                     {(()=>{
-                      const gs=Array.from(new Set(equipos.map(e=>e.genero).filter(Boolean)));
-                      if(gs.length>0) return gs.map(g=>(<div key={g}>
-                        <div className="bp-gendiv">{g==='mujeres'?'♀ Mujeres':'♂ Hombres'}</div>
-                        {equipos.filter(eq=>eq.genero===g).map(eq=>(
-                          <button key={eq.id} className={`bp-eqbtn ${equipoId===eq.id?'sel':''}`} onClick={()=>setEquipoId(eq.id)}>
-                            <div className="bp-eqbtn-dot" style={{background:eq.color}} />
-                            <div className="bp-eqbtn-i"><div className="bp-eqbtn-n">{eq.nombre}</div>
-                              {(eq.lider||eq.consejero)&&<div className="bp-eqbtn-s">{eq.lider&&`Líder: ${eq.lider}`}{eq.lider&&eq.consejero&&' · '}{eq.consejero&&`Consejero: ${eq.consejero}`}</div>}
+                      const eqBtn = (eq: any) => {
+                        const sel = equipoId===eq.id;
+                        return (
+                          <button key={eq.id} onClick={()=>setEquipoId(eq.id)} style={{width:'100%',textAlign:'left',padding:'10px 12px',borderRadius:10,marginBottom:6,background:sel?'#f0feff':'#fff',border:`1.5px solid ${sel?'#00e5ff':'#e5e7eb'}`,color:'#333',cursor:'pointer',display:'flex',alignItems:'center',gap:10,fontFamily:"'Plus Jakarta Sans',sans-serif",boxSizing:'border-box'}}>
+                            <div style={{width:10,height:10,borderRadius:'50%',flexShrink:0,background:eq.color}} />
+                            <div style={{flex:1}}>
+                              <div style={{fontSize:13,fontWeight:600}}>{eq.nombre}</div>
+                              {(eq.lider||eq.consejero)&&<div style={{fontSize:10,color:'#999',marginTop:1}}>{eq.lider&&`Líder: ${eq.lider}`}{eq.lider&&eq.consejero&&' · '}{eq.consejero&&`Consejero: ${eq.consejero}`}</div>}
                             </div>
-                            <div className="bp-eqbtn-c">{equipoId===eq.id?'✓':''}</div>
+                            <div style={{width:18,height:18,borderRadius:'50%',display:'flex',alignItems:'center',justifyContent:'center',fontSize:10,fontWeight:700,background:sel?'#00e5ff':'transparent',border:`2px solid ${sel?'#00e5ff':'#ddd'}`,color:sel?'#fff':'transparent',flexShrink:0}}>✓</div>
                           </button>
-                        ))}
+                        );
+                      };
+                      const gs=Array.from(new Set(equipos.map((e:any)=>e.genero).filter(Boolean)));
+                      if(gs.length>0) return gs.map(g=>(<div key={g as string}>
+                        <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:'1.5px',textTransform:'uppercase',margin:'12px 0 6px'}}>{g==='mujeres'?'♀ Mujeres':'♂ Hombres'}</div>
+                        {equipos.filter((eq:any)=>eq.genero===g).map(eqBtn)}
                       </div>));
-                      return equipos.map(eq=>(<button key={eq.id} className={`bp-eqbtn ${equipoId===eq.id?'sel':''}`} onClick={()=>setEquipoId(eq.id)}>
-                        <div className="bp-eqbtn-dot" style={{background:eq.color}} /><div className="bp-eqbtn-i"><div className="bp-eqbtn-n">{eq.nombre}</div></div>
-                        <div className="bp-eqbtn-c">{equipoId===eq.id?'✓':''}</div>
-                      </button>));
+                      return equipos.map(eqBtn);
                     })()}
                   </div>
                 )}

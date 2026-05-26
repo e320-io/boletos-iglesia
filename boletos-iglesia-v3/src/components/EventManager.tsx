@@ -17,6 +17,7 @@ interface Evento {
   ministerio: string | null;
   activo: boolean;
   compra_online: boolean;
+  imagen_url: string | null;
 }
 
 interface FasePrecio {
@@ -51,6 +52,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const [usaFasesPrecio, setUsaFasesPrecio] = useState(false);
   const [usaEquipos, setUsaEquipos] = useState(false);
   const [compraOnline, setCompraOnline] = useState(false);
+  const [imagenUrl, setImagenUrl] = useState('');
   const [fases, setFases] = useState<FasePrecio[]>([]);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
   const [formError, setFormError] = useState('');
@@ -72,7 +74,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const resetForm = () => {
     setNombre(''); setSlug(''); setFecha(''); setDescripcion(''); setMinisterio('');
     setEsGratuito(false); setPrecioDefault(550); setTieneAsientos(false);
-    setUsaFasesPrecio(false); setUsaEquipos(false); setCompraOnline(false);
+    setUsaFasesPrecio(false); setUsaEquipos(false); setCompraOnline(false); setImagenUrl('');
     setFases([]); setEquipos([]);
     setFormError(''); setFormSuccess('');
   };
@@ -91,6 +93,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     setUsaFasesPrecio(evento.usa_fases_precio);
     setUsaEquipos(evento.usa_equipos);
     setCompraOnline(evento.compra_online ?? false);
+    setImagenUrl(evento.imagen_url ?? '');
 
     // Load fases
     const { data: fasesData } = await supabase.from('fases_precio').select('*').eq('evento_id', evento.id).order('fecha_inicio');
@@ -121,6 +124,7 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
         usa_fases_precio: usaFasesPrecio,
         usa_equipos: usaEquipos,
         compra_online: compraOnline,
+        imagen_url: imagenUrl.trim() || null,
       };
 
       let eventoId: string;
@@ -381,6 +385,15 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                 <input type="text" value={descripcion} onChange={e => setDescripcion(e.target.value)}
                   placeholder="Breve descripción del evento" className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
                   style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>URL del flyer / imagen</label>
+                <input type="url" value={imagenUrl} onChange={e => setImagenUrl(e.target.value)}
+                  placeholder="https://... (se muestra en la página de compra)" className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                {imagenUrl && (
+                  <img src={imagenUrl} alt="preview" className="mt-2 rounded-lg" style={{ maxHeight: 120, objectFit: 'cover', width: '100%' }} />
+                )}
               </div>
             </div>
           </div>

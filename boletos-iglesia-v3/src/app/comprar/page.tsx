@@ -8,7 +8,17 @@ import SeatMap from '@/components/SeatMap';
 interface Evento {
   id: string; nombre: string; slug: string; fecha: string; descripcion: string;
   precio_default: number; tiene_asientos: boolean; es_gratuito: boolean; usa_equipos: boolean;
+  usa_fases_precio?: boolean;
   imagen_url?: string | null;
+}
+
+interface FasePrecio { precio: number; fecha_inicio: string; fecha_fin: string; }
+
+function getPrecioFase(precioDefault: number, fases: FasePrecio[]): number {
+  if (!fases.length) return precioDefault;
+  const hoy = new Date().toISOString().split('T')[0];
+  const fase = fases.find(f => f.fecha_inicio <= hoy && hoy <= f.fecha_fin);
+  return fase ? fase.precio : precioDefault;
 }
 
 const EVENT_IMAGES: Record<string, string> = {
@@ -22,6 +32,8 @@ export default function ComprarPage() {
   const [asientos, setAsientos] = useState<Asiento[]>([]);
   const [naciones, setNaciones] = useState<Nacion[]>([]);
   const [equipos, setEquipos] = useState<any[]>([]);
+  const [fases, setFases] = useState<FasePrecio[]>([]);
+  const [preciosPorEvento, setPreciosPorEvento] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState(false);
   const [error, setError] = useState('');
@@ -38,20 +50,45 @@ export default function ComprarPage() {
   const [step, setStep] = useState<'eventos'|'datos'|'asientos'|'pago'>('eventos');
 
   useEffect(() => {
-    supabase.from('eventos').select('*').eq('activo', true).eq('compra_online', true).order('fecha')
-      .then(({ data }) => { if (data) setEventos(data as Evento[]); setLoading(false); });
+    const load = async () => {
+      const { data: evData } = await supabase.from('eventos').select('*').eq('activo', true).eq('compra_online', true).order('fecha');
+      if (!evData) { setLoading(false); return; }
+      setEventos(evData as Evento[]);
+
+      const conFases = evData.filter((e: any) => e.usa_fases_precio);
+      if (conFases.length > 0) {
+        const ids = conFases.map((e: any) => e.id);
+        const { data: fasesData } = await supabase.from('fases_precio')
+          .select('evento_id, precio, fecha_inicio, fecha_fin').in('evento_id', ids);
+        if (fasesData) {
+          const hoy = new Date().toISOString().split('T')[0];
+          const precios: Record<string, number> = {};
+          for (const ev of conFases) {
+            const fasesEvento = fasesData.filter((f: any) => f.evento_id === ev.id);
+            const faseActiva = fasesEvento.find((f: any) => f.fecha_inicio <= hoy && hoy <= f.fecha_fin);
+            precios[ev.id] = faseActiva ? faseActiva.precio : ev.precio_default;
+          }
+          setPreciosPorEvento(precios);
+        }
+      }
+      setLoading(false);
+    };
+    load();
   }, []);
 
   const loadData = useCallback(async (e: Evento) => {
-    const [n, eq, a] = await Promise.all([
+    const [n, eq, a, f] = await Promise.all([
       supabase.from('naciones').select('*').order('nombre'),
       supabase.from('equipos_evento').select('*').eq('evento_id', e.id).order('nombre'),
       e.tiene_asientos ? supabase.from('asientos').select('*').eq('evento_id', e.id) : Promise.resolve({ data: [] }),
+      e.usa_fases_precio ? supabase.from('fases_precio').select('precio, fecha_inicio, fecha_fin').eq('evento_id', e.id).order('fecha_inicio') : Promise.resolve({ data: [] }),
     ]);
     if (n.data) setNaciones(n.data); if (eq.data) setEquipos(eq.data); if (a.data) setAsientos((a.data as Asiento[]).filter(s => s.seccion !== 'conferencistas'));
+    if (f.data) setFases(f.data as FasePrecio[]);
   }, []);
 
-  const pick = (e: Evento) => { setEv(e); loadData(e); setStep('datos'); };
+  const getPrecioEvento = (e: Evento) => preciosPorEvento[e.id] ?? e.precio_default;
+  const pick = (e: Evento) => { setEv(e); setFases([]); loadData(e); setStep('datos'); };
   const seatClick = (id: string) => setSelectedSeats(p => p.includes(id) ? p.filter(s=>s!==id) : p.length>=numBoletos ? [...p.slice(1),id] : [...p,id]);
   const goAsientos = () => { if(!nombre.trim()){setError('Ingresa tu nombre');return;} if(!correo.trim()){setError('Ingresa tu correo');return;} setError(''); setStep(ev?.tiene_asientos?'asientos':'pago'); };
   const goPago = () => { if(selectedSeats.length<numBoletos){setError(`Selecciona ${numBoletos} asiento${numBoletos>1?'s':''}`);return;} setError(''); setStep('pago'); };
@@ -66,7 +103,8 @@ export default function ComprarPage() {
     } catch(e:any){setError(e.message||'Error');setProcessing(false);}
   };
 
-  const total = (ev?.precio_default||0)*numBoletos;
+  const precioBoleto = ev ? getPrecioFase(ev.precio_default, fases) : 0;
+  const total = precioBoleto * numBoletos;
   const hasEq = equipos.length>0;
   const evImg = (e: Evento) => e.imagen_url || EVENT_IMAGES[e.slug] || null;
   const fmt = (f:string) => { const d=new Date(f+'T12:00:00'); return { day:d.getDate(), mon:d.toLocaleDateString('es-MX',{month:'short'}).toUpperCase(), full:d.toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'}) }; };
@@ -204,7 +242,7 @@ export default function ComprarPage() {
                   <div key={e.id} className="bp-evcard bp-anim" style={{animationDelay:`${i*.08}s`}} onClick={()=>pick(e)}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={img} alt={e.nombre} />
-                    <div className="bp-evcard-price">${e.precio_default.toLocaleString()}</div>
+                    <div className="bp-evcard-price">${getPrecioEvento(e).toLocaleString()}</div>
                     <div className="bp-evcard-info">
                       <div className="bp-evcard-name">{e.nombre}</div>
                       <div className="bp-evcard-row">
@@ -223,7 +261,7 @@ export default function ComprarPage() {
                       <div className="bp-evcard-row" style={{marginTop:4}}>
                         {e.descripcion && <span>{e.descripcion}</span>}
                       </div>
-                      <div style={{marginTop:6}}><span style={{color:'#00e5ff',fontWeight:800,fontSize:16}}>${e.precio_default.toLocaleString()}</span>
+                      <div style={{marginTop:6}}><span style={{color:'#00e5ff',fontWeight:800,fontSize:16}}>${getPrecioEvento(e).toLocaleString()}</span>
                         {e.tiene_asientos && <span style={{marginLeft:8,fontSize:9,padding:'2px 8px',borderRadius:10,background:'rgba(0,229,255,.15)',color:'#00e5ff',fontWeight:600}}>Con asientos</span>}
                       </div>
                     </div>
@@ -266,7 +304,7 @@ export default function ComprarPage() {
                   <div className="bp-sh-name">{ev.nombre}</div>
                   <div style={{fontSize:12,color:'#888',marginTop:4}}>{ev.descripcion}</div>
                 </div>
-                <div className="bp-sh-price">${ev.precio_default.toLocaleString()}</div>
+                <div className="bp-sh-price">${precioBoleto.toLocaleString()}</div>
               </div>
 
               {/* Info pills */}
@@ -403,7 +441,7 @@ export default function ComprarPage() {
                   <div className="bp-sumrow"><span>Nombre</span><span className="bp-sumval">{nombre}</span></div>
                   <div className="bp-sumrow"><span>Correo</span><span className="bp-sumval" style={{fontSize:12}}>{correo}</span></div>
                   {selectedSeats.length>0&&(<div className="bp-sumrow"><span>Asientos</span><span style={{display:'flex',gap:4}}>{selectedSeats.map(id=><span key={id} className="bp-badge">{sl(id)}</span>)}</span></div>)}
-                  <div className="bp-sumrow"><span>Boletos</span><span className="bp-sumval">{numBoletos} × ${ev.precio_default.toLocaleString()}</span></div>
+                  <div className="bp-sumrow"><span>Boletos</span><span className="bp-sumval">{numBoletos} × ${precioBoleto.toLocaleString()}</span></div>
                   <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',paddingTop:12,marginTop:8,borderTop:'1.5px solid #eee'}}>
                     <span style={{fontSize:14,fontWeight:600,color:'#333'}}>Total</span>
                     <span className="bp-sumtot">${total.toLocaleString()}</span>

@@ -13,7 +13,20 @@ export async function POST(request: NextRequest) {
     if (evError || !evento) return NextResponse.json({ error: 'Evento no encontrado' }, { status: 404 });
 
     const numBoletos = cantidad || 1;
-    const total = evento.precio_default * numBoletos;
+
+    let precioBoleto = evento.precio_default;
+    if (evento.usa_fases_precio) {
+      const { data: fases } = await supabase
+        .from('fases_precio').select('precio, fecha_inicio, fecha_fin')
+        .eq('evento_id', eventoId).order('fecha_inicio');
+      if (fases && fases.length > 0) {
+        const hoy = new Date().toISOString().split('T')[0];
+        const faseActiva = fases.find((f: any) => f.fecha_inicio <= hoy && hoy <= f.fecha_fin);
+        if (faseActiva) precioBoleto = faseActiva.precio;
+      }
+    }
+
+    const total = precioBoleto * numBoletos;
     if (total <= 0) return NextResponse.json({ error: 'Este evento es gratuito' }, { status: 400 });
 
     if (asientoIds && asientoIds.length > 0) {

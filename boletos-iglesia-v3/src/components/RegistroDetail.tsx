@@ -17,12 +17,13 @@ interface Props {
   tieneAsientos?: boolean;
   allRegistros?: Registro[];
   esEncuentro?: boolean;
+  precioActual?: number;
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, precioActual, onBack, onRefresh, addToast }: Props) {
   const { user } = useAuth();
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -138,14 +139,19 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     } finally { setLoading(false); }
   };
 
-  const saldo = Number(registro.monto_total) - Number(registro.monto_pagado);
+  const isLiquidado = registro.status === 'liquidado';
+  // Si hay un precio actual del evento y el registro no está liquidado, aplica el nuevo precio
+  const montoTotalEfectivo = !isLiquidado && precioActual && precioActual !== Number(registro.precio_boleto)
+    ? precioActual
+    : Number(registro.monto_total);
+  const precioChanged = !isLiquidado && precioActual !== undefined && precioActual !== Number(registro.precio_boleto);
+  const saldo = montoTotalEfectivo - Number(registro.monto_pagado);
   const nacion = naciones.find(n => n.id === registro.nacion_id);
   const pagos = (registro.pagos || []).sort((a: any, b: any) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
   const registroAsientos = (registro.asientos || []) as any[];
   const hasAsiento = registroAsientos.length > 0;
-  const isLiquidado = registro.status === 'liquidado';
   const canAssignSeat = tieneAsientos && isLiquidado && !hasAsiento;
 
   // Will this abono liquidate the ticket?
@@ -218,7 +224,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     if (montoTotal > saldo) { addToast('error', 'El abono no puede ser mayor al saldo'); return; }
 
     const newPagado = Number(registro.monto_pagado) + montoTotal;
-    const newStatus = newPagado >= Number(registro.monto_total) ? 'liquidado' : 'abono';
+    const newStatus = newPagado >= montoTotalEfectivo ? 'liquidado' : 'abono';
     const isLiquidating = newStatus === 'liquidado';
 
     if (isLiquidating && tieneAsientos && !hasAsiento && selectedSeatForAssign.length === 0) {
@@ -242,8 +248,13 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         if (pay2Error) throw pay2Error;
       }
 
+      const regUpdate: any = { monto_pagado: newPagado, status: newStatus };
+      if (precioChanged) {
+        regUpdate.precio_boleto = montoTotalEfectivo;
+        regUpdate.monto_total = montoTotalEfectivo;
+      }
       const { error: regError } = await supabase
-        .from('registros').update({ monto_pagado: newPagado, status: newStatus }).eq('id', registro.id);
+        .from('registros').update(regUpdate).eq('id', registro.id);
       if (regError) throw regError;
 
       if (isLiquidating && tieneAsientos && selectedSeatForAssign.length > 0) {
@@ -569,9 +580,15 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
           {!editing && (
             <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
               <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Resumen de Pago</h3>
+              {precioChanged && (
+                <div className="mb-4 rounded-lg px-4 py-2.5 text-xs font-medium flex items-center gap-2"
+                  style={{ background: 'rgba(245,158,11,0.12)', color: '#f59e0b', border: '1px solid rgba(245,158,11,0.3)' }}>
+                  ⚠️ El precio del evento cambió a <strong>${montoTotalEfectivo.toLocaleString()}</strong>. Al registrar el próximo abono se actualizará el total.
+                </div>
+              )}
               <div className="grid grid-cols-3 gap-4 mb-6">
                 <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
-                  <div className="text-xl font-bold">${Number(registro.monto_total).toLocaleString()}</div>
+                  <div className={`text-xl font-bold ${precioChanged ? 'text-amber-400' : ''}`}>${montoTotalEfectivo.toLocaleString()}</div>
                   <div className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Total</div>
                 </div>
                 <div className="rounded-lg p-4 text-center" style={{ background: 'var(--color-bg)' }}>
@@ -586,7 +603,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
               <div className="w-full h-3 rounded-full overflow-hidden" style={{ background: 'var(--color-bg)' }}>
                 <div className="h-full rounded-full transition-all duration-500"
                   style={{
-                    width: `${Number(registro.monto_total) > 0 ? Math.min(100, (Number(registro.monto_pagado) / Number(registro.monto_total)) * 100) : 0}%`,
+                    width: `${montoTotalEfectivo > 0 ? Math.min(100, (Number(registro.monto_pagado) / montoTotalEfectivo) * 100) : 0}%`,
                     background: registro.status === 'liquidado' ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #f59e0b, #fbbf24)',
                   }} />
               </div>

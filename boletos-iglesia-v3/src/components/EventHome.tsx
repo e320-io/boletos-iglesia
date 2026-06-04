@@ -32,6 +32,20 @@ interface Evento {
   fecha: string;
   precio_default: number;
   tiene_asientos: boolean;
+  usa_fases_precio?: boolean;
+}
+
+interface FasePrecio {
+  precio: number;
+  fecha_inicio: string;
+  fecha_fin: string;
+}
+
+function getPrecioFase(precioDefault: number, fases: FasePrecio[]): number {
+  if (!fases.length) return precioDefault;
+  const hoy = new Date().toISOString().split('T')[0];
+  const fase = fases.find(f => f.fecha_inicio <= hoy && hoy <= f.fecha_fin);
+  return fase ? fase.precio : precioDefault;
 }
 
 export default function EventHome({ evento, onBack, userRole = 'registro', availableEventos, onEventChange }: {
@@ -87,6 +101,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
 
   // Equipos for events like HollyFest
   const [equipos, setEquipos] = useState<any[]>([]);
+  const [fases, setFases] = useState<FasePrecio[]>([]);
 
   // Conferencistas tab state (shared with cortesía mode)
   const [confNombre, setConfNombre] = useState('');
@@ -102,7 +117,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   }, []);
 
   const fetchData = useCallback(async () => {
-    const [nacionesRes, equiposRes, asientosRes, registrosRes] = await Promise.all([
+    const [nacionesRes, equiposRes, asientosRes, registrosRes, fasesRes] = await Promise.all([
       supabase.from('naciones').select('*').order('nombre'),
       supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre'),
       evento.tiene_asientos
@@ -115,13 +130,21 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         asientos(*),
         pagos(*)
       `).eq('evento_id', evento.id).order('created_at', { ascending: false }),
+      evento.usa_fases_precio
+        ? supabase.from('fases_precio').select('precio, fecha_inicio, fecha_fin').eq('evento_id', evento.id).order('fecha_inicio')
+        : Promise.resolve({ data: [] }),
     ]);
 
     if (nacionesRes.data) setNaciones(nacionesRes.data);
     if (equiposRes.data) setEquipos(equiposRes.data);
     if (asientosRes.data) setAsientos(asientosRes.data as Asiento[]);
     if (registrosRes.data) setRegistros(registrosRes.data);
-  }, [evento.id, evento.tiene_asientos]);
+    if (fasesRes.data) {
+      setFases(fasesRes.data as FasePrecio[]);
+      const precioFase = getPrecioFase(evento.precio_default, fasesRes.data as FasePrecio[]);
+      setPrecioBoleto(precioFase);
+    }
+  }, [evento.id, evento.tiene_asientos, evento.usa_fases_precio, evento.precio_default]);
 
   useEffect(() => {
     fetchData();
@@ -616,10 +639,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
                       <div className="grid grid-cols-2 gap-2">
                         {['Encuentrista', 'Servidor'].map(t => (
-                          <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : evento.precio_default); }}
+                          <button key={t} onClick={() => { setTipo(t); setPrecioBoleto(t === 'Servidor' ? 150 : getPrecioFase(evento.precio_default, fases)); }}
                             className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                             style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                            {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${evento.precio_default})`}
+                            {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${getPrecioFase(evento.precio_default, fases)})`}
                           </button>
                         ))}
                       </div>
@@ -867,6 +890,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
             tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
+            precioActual={!isFreeEvent ? precioBoleto : undefined}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 
@@ -1008,6 +1032,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'conferencistas' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
             tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
+            precioActual={!isFreeEvent ? precioBoleto : undefined}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
       </main>

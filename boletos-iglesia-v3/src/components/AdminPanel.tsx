@@ -144,6 +144,8 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
     registro: { label: 'Registro', color: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30' },
     dueno: { label: 'Dueño', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
     evento: { label: 'Evento', color: 'bg-purple-500/20 text-purple-400 border-purple-500/30' },
+    merch_admin: { label: 'Merch Admin', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+    servidor_merch: { label: 'POS Merch', color: 'bg-orange-500/20 text-orange-400 border-orange-500/30' },
   };
 
   return (
@@ -211,12 +213,14 @@ export default function AdminPanel({ onBack }: { onBack: () => void }) {
               </div>
               <div>
                 <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Rol</label>
-                <div className="grid grid-cols-4 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {[
                     { value: 'registro', label: '📋 Registro', desc: 'Registra personas' },
                     { value: 'dueno', label: '👑 Dueño', desc: 'Solo dashboard' },
                     { value: 'evento', label: '🎫 Evento', desc: 'Un solo evento' },
                     { value: 'admin', label: '⚙️ Admin', desc: 'Todo + usuarios' },
+                    { value: 'merch_admin', label: '👕 Merch Admin', desc: 'Gestiona merch' },
+                    { value: 'servidor_merch', label: '🛒 POS Merch', desc: 'Punto de venta' },
                   ].map(r => (
                     <button key={r.value} onClick={() => { setNewRol(r.value); if (r.value !== 'evento') setNewEventoId(''); if (r.value !== 'dueno') setNewEventoIds([]); }}
                       className={`px-2 py-2 rounded-lg text-xs border transition-all text-center ${newRol === r.value ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}

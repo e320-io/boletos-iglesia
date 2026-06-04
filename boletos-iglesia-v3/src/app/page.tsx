@@ -8,6 +8,8 @@ import EventHome from '@/components/EventHome';
 import AdminPanel from '@/components/AdminPanel';
 import EventManager from '@/components/EventManager';
 import CorteDeCajaModal from '@/components/CorteDeCajaModal';
+import MerchManager from '@/components/MerchManager';
+import MerchPOS from '@/components/MerchPOS';
 
 interface Evento {
   id: string;
@@ -28,6 +30,7 @@ export default function HomePage() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [showEventManager, setShowEventManager] = useState(false);
   const [showCorteDeCaja, setShowCorteDeCaja] = useState(false);
+  const [showMerchPOS, setShowMerchPOS] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -73,6 +76,18 @@ export default function HomePage() {
   // Not logged in — show login
   if (!user) {
     return <LoginScreen />;
+  }
+
+  // Merch roles — bypass event selector entirely
+  if (user.rol === 'merch_admin') {
+    if (showMerchPOS) {
+      return <MerchPOS onBack={() => setShowMerchPOS(false)} user={user} />;
+    }
+    return <MerchManager onBack={() => logout()} user={user} onOpenPOS={() => setShowMerchPOS(true)} />;
+  }
+
+  if (user.rol === 'servidor_merch') {
+    return <MerchPOS onBack={() => logout()} user={user} />;
   }
 
   // Admin panel

@@ -63,6 +63,62 @@ export interface Pago {
 
 export type MetodoPago = Pago['metodo_pago'];
 
+export interface MerchProducto {
+  id: string;
+  nombre: string;
+  descripcion: string | null;
+  precio: number;
+  imagen_url: string | null;
+  categoria: string | null;
+  activo: boolean;
+  created_at: string;
+  variantes?: MerchVariante[];
+}
+
+export interface MerchVariante {
+  id: string;
+  producto_id: string;
+  modelo: string | null;
+  talla: string | null;
+  sku: string | null;
+  created_at: string;
+  inventario?: { cantidad: number }[];
+  stock?: number;
+}
+
+export interface MerchVenta {
+  id: string;
+  folio: number;
+  evento_id: string | null;
+  servidor_id: string;
+  servidor_nombre: string;
+  cliente_nombre: string | null;
+  cliente_correo: string | null;
+  total: number;
+  created_at: string;
+  detalle?: MerchVentaDetalle[];
+  pagos?: MerchPagoVenta[];
+}
+
+export interface MerchVentaDetalle {
+  id: string;
+  venta_id: string;
+  variante_id: string;
+  producto_nombre: string;
+  variante_descripcion: string | null;
+  cantidad: number;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface MerchPagoVenta {
+  id: string;
+  venta_id: string;
+  monto: number;
+  metodo_pago: 'efectivo' | 'transferencia' | 'tarjeta' | 'otro';
+  referencia: string | null;
+}
+
 export interface GastoEvento {
   id: string;
   evento_id: string;

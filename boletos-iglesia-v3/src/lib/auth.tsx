@@ -6,7 +6,7 @@ export interface User {
   id: string;
   username: string;
   nombre: string;
-  rol: 'admin' | 'registro' | 'dueno' | 'evento';
+  rol: 'admin' | 'registro' | 'dueno' | 'evento' | 'merch_admin' | 'servidor_merch';
   evento_id?: string;
   evento_ids?: string[];
 }

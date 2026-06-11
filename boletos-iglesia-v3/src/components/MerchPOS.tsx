@@ -61,6 +61,7 @@ export default function MerchPOS({ onBack, user }: Props) {
   const [saving, setSaving] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [lastFolio, setLastFolio] = useState<number | null>(null);
+  const [lastSaldo, setLastSaldo] = useState<number>(0);
 
   const loadProductos = useCallback(async () => {
     setLoading(true);
@@ -153,13 +154,14 @@ export default function MerchPOS({ onBack, user }: Props) {
     );
   };
 
+  const esAbono = pagosTotal > 0 && pagosTotal < cartTotal;
+
   const handleCheckout = async () => {
     if (cart.length === 0) return;
     setErrorMsg('');
 
-    // Validate payments
-    if (pagosTotal < cartTotal) {
-      setErrorMsg(`Falta $${(cartTotal - pagosTotal).toLocaleString('es-MX')} por asignar a un método de pago.`);
+    if (pagosTotal <= 0) {
+      setErrorMsg('Ingresa al menos un pago o abono.');
       return;
     }
 
@@ -192,6 +194,7 @@ export default function MerchPOS({ onBack, user }: Props) {
       if (!res.ok) throw new Error(data.error || 'Error al guardar venta');
 
       setLastFolio(data.venta.folio);
+      setLastSaldo(cartTotal - pagosTotal);
       setStep('success');
       loadProductos(); // refresh stock
     } catch (err: any) {
@@ -226,6 +229,11 @@ export default function MerchPOS({ onBack, user }: Props) {
             <p className="text-sm mt-3" style={{ color: 'var(--color-text-muted)' }}>
               Total: <strong>${cartTotal.toLocaleString('es-MX')}</strong>
             </p>
+            {lastSaldo > 0 && (
+              <div className="mt-3 px-3 py-2 rounded-lg text-sm font-semibold" style={{ background: 'rgba(245,158,11,0.15)', color: '#f59e0b' }}>
+                Saldo pendiente: ${lastSaldo.toLocaleString('es-MX')}
+              </div>
+            )}
             {clienteCorreo && (
               <p className="text-xs mt-2" style={{ color: 'var(--color-text-muted)' }}>
                 Comprobante enviado a {clienteCorreo}
@@ -391,11 +399,19 @@ export default function MerchPOS({ onBack, user }: Props) {
             </p>
           )}
 
+          {esAbono && (
+            <div className="px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(245,158,11,0.1)', color: '#f59e0b' }}>
+              Abono: ${pagosTotal.toLocaleString('es-MX')} — resta ${(cartTotal - pagosTotal).toLocaleString('es-MX')}
+            </div>
+          )}
+
           <button onClick={handleCheckout}
-            disabled={saving || cart.length === 0 || pagosTotal < cartTotal}
+            disabled={saving || cart.length === 0 || pagosTotal <= 0}
             className="w-full py-4 rounded-xl text-white font-bold text-lg disabled:opacity-40 transition-all"
-            style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
-            {saving ? 'Procesando...' : `Confirmar venta · $${cartTotal.toLocaleString('es-MX')}`}
+            style={{ background: esAbono ? 'linear-gradient(135deg, #f59e0b, #d97706)' : 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
+            {saving ? 'Procesando...' : esAbono
+              ? `Registrar abono · $${pagosTotal.toLocaleString('es-MX')}`
+              : `Confirmar venta · $${cartTotal.toLocaleString('es-MX')}`}
           </button>
         </div>
       </div>

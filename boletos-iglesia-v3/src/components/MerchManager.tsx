@@ -56,6 +56,13 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
   const [ventas, setVentas] = useState<MerchVenta[]>([]);
   const [dashLoading, setDashLoading] = useState(false);
 
+  // Abono modal
+  const [abonoVenta, setAbonoVenta] = useState<MerchVenta | null>(null);
+  const [abonoMetodo, setAbonoMetodo] = useState('efectivo');
+  const [abonoMonto, setAbonoMonto] = useState('');
+  const [abonoRef, setAbonoRef] = useState('');
+  const [abonoSaving, setAbonoSaving] = useState(false);
+
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => {
@@ -194,6 +201,27 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
     if (!confirm('¿Eliminar esta variante?')) return;
     await fetch(`/api/merch/inventario?id=${varianteId}`, { method: 'DELETE' });
     loadProductos();
+  };
+
+  const handleRegistrarAbono = async () => {
+    if (!abonoVenta) return;
+    const monto = parseFloat(abonoMonto);
+    if (!monto || monto <= 0) return;
+    setAbonoSaving(true);
+    const res = await fetch('/api/merch/ventas', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ venta_id: abonoVenta.id, metodo_pago: abonoMetodo, monto, referencia: abonoRef || null }),
+    });
+    setAbonoSaving(false);
+    if (res.ok) {
+      setAbonoVenta(null);
+      setAbonoMonto('');
+      setAbonoRef('');
+      setAbonoMetodo('efectivo');
+      showToast('Abono registrado');
+      loadDashboard();
+    }
   };
 
   const categorias = Array.from(new Set(productos.map(p => p.categoria).filter((c): c is string => Boolean(c))));
@@ -521,6 +549,71 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
                   </div>
                 </div>
 
+                {/* Abonos pendientes */}
+                {(() => {
+                  const pendientes = ventas.filter(v => v.estado === 'abonado');
+                  if (pendientes.length === 0) return null;
+                  return (
+                    <div className="rounded-xl border overflow-hidden mb-6" style={{ borderColor: '#f59e0b' }}>
+                      <div className="px-6 py-4 border-b flex items-center gap-2"
+                        style={{ borderColor: '#f59e0b', background: 'rgba(245,158,11,0.08)' }}>
+                        <span className="text-base">⚠️</span>
+                        <h3 className="font-semibold text-sm" style={{ color: '#f59e0b' }}>
+                          Abonos pendientes ({pendientes.length})
+                        </h3>
+                      </div>
+                      <div className="overflow-x-auto" style={{ background: 'var(--color-bg)' }}>
+                        <table className="w-full">
+                          <thead>
+                            <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
+                              {['Folio', 'Fecha', 'Cliente', 'Servidor', 'Total', 'Pagado', 'Resta', ''].map(h => (
+                                <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider"
+                                  style={{ color: 'var(--color-text-muted)' }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {pendientes.map(v => {
+                              const pagado = (v.pagos || []).reduce((s, p) => s + Number(p.monto), 0);
+                              const resta = Number(v.total) - pagado;
+                              return (
+                                <tr key={v.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                                  <td className="px-4 py-3 font-mono font-bold text-sm" style={{ color: 'var(--color-accent)' }}>
+                                    #{v.folio}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                    {new Date(v.created_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm">{v.cliente_nombre || '—'}</td>
+                                  <td className="px-4 py-3 text-sm" style={{ color: 'var(--color-text-muted)' }}>
+                                    {v.servidor_nombre}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-semibold">
+                                    ${Number(v.total).toLocaleString('es-MX')}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm" style={{ color: '#10b981' }}>
+                                    ${pagado.toLocaleString('es-MX')}
+                                  </td>
+                                  <td className="px-4 py-3 text-sm font-bold" style={{ color: '#f59e0b' }}>
+                                    ${resta.toLocaleString('es-MX')}
+                                  </td>
+                                  <td className="px-4 py-3">
+                                    <button onClick={() => { setAbonoVenta(v); setAbonoMonto(''); setAbonoRef(''); setAbonoMetodo('efectivo'); }}
+                                      className="text-xs px-3 py-1.5 rounded-lg font-semibold text-white"
+                                      style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                                      + Abonar
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })()}
+
                 {/* Recent sales */}
                 <div className="rounded-xl border overflow-hidden" style={{ borderColor: 'var(--color-border)' }}>
                   <div className="px-6 py-4 border-b flex items-center justify-between"
@@ -535,7 +628,7 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
                     <table className="w-full">
                       <thead>
                         <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                          {['Folio', 'Fecha', 'Cliente', 'Servidor', 'Artículos', 'Total'].map(h => (
+                          {['Folio', 'Fecha', 'Cliente', 'Servidor', 'Artículos', 'Total', 'Estado'].map(h => (
                             <th key={h} className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider"
                               style={{ color: 'var(--color-text-muted)' }}>{h}</th>
                           ))}
@@ -543,7 +636,7 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
                       </thead>
                       <tbody>
                         {ventas.length === 0 && (
-                          <tr><td colSpan={6} className="px-4 py-8 text-center text-sm"
+                          <tr><td colSpan={7} className="px-4 py-8 text-center text-sm"
                             style={{ color: 'var(--color-text-muted)' }}>Sin ventas registradas.</td></tr>
                         )}
                         {ventas.map(v => (
@@ -564,6 +657,15 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
                             <td className="px-4 py-3 text-sm font-semibold">
                               ${Number(v.total).toLocaleString('es-MX')}
                             </td>
+                            <td className="px-4 py-3">
+                              <span className="text-xs px-2 py-1 rounded-full font-semibold"
+                                style={{
+                                  background: v.estado === 'abonado' ? 'rgba(245,158,11,0.15)' : 'rgba(16,185,129,0.15)',
+                                  color: v.estado === 'abonado' ? '#f59e0b' : '#10b981',
+                                }}>
+                                {v.estado === 'abonado' ? 'Abono' : 'Pagado'}
+                              </span>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -575,6 +677,71 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
           </div>
         )}
       </div>
+
+      {/* Abono Modal */}
+      {abonoVenta && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4" style={{ background: 'var(--color-surface)' }}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-bold">Registrar abono</h3>
+              <button onClick={() => setAbonoVenta(null)} style={{ color: 'var(--color-text-muted)' }}>✕</button>
+            </div>
+            <div className="text-sm space-y-1 p-3 rounded-lg" style={{ background: 'var(--color-bg)' }}>
+              <p>Folio <strong>#{abonoVenta.folio}</strong> · {abonoVenta.cliente_nombre || 'Sin nombre'}</p>
+              {(() => {
+                const pagado = (abonoVenta.pagos || []).reduce((s, p) => s + Number(p.monto), 0);
+                const resta = Number(abonoVenta.total) - pagado;
+                return (
+                  <p style={{ color: '#f59e0b' }}>
+                    Resta: <strong>${resta.toLocaleString('es-MX')}</strong> de ${Number(abonoVenta.total).toLocaleString('es-MX')}
+                  </p>
+                );
+              })()}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Método</label>
+                <select value={abonoMetodo} onChange={e => setAbonoMetodo(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="tarjeta">Tarjeta</option>
+                  <option value="otro">Otro</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Monto</label>
+                <input type="number" min="1" value={abonoMonto} onChange={e => setAbonoMonto(e.target.value)}
+                  placeholder="0"
+                  className="w-full px-3 py-2 rounded-lg border text-sm"
+                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
+              </div>
+              {(abonoMetodo === 'transferencia' || abonoMetodo === 'otro') && (
+                <div>
+                  <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Referencia</label>
+                  <input value={abonoRef} onChange={e => setAbonoRef(e.target.value)}
+                    placeholder="Número de referencia"
+                    className="w-full px-3 py-2 rounded-lg border text-sm"
+                    style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
+                </div>
+              )}
+            </div>
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setAbonoVenta(null)}
+                className="flex-1 py-2 rounded-lg border text-sm"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                Cancelar
+              </button>
+              <button onClick={handleRegistrarAbono} disabled={abonoSaving || !abonoMonto || parseFloat(abonoMonto) <= 0}
+                className="flex-1 py-2 rounded-lg text-white text-sm font-semibold disabled:opacity-40"
+                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}>
+                {abonoSaving ? 'Guardando...' : 'Registrar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Product Form Modal */}
       {showProductForm && (

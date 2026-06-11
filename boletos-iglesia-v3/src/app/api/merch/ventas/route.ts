@@ -34,9 +34,12 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const { servidor_id, servidor_nombre, cliente_nombre, cliente_correo, evento_id, items, pagos, total } = body;
 
+  const totalPagado = (pagos as any[]).reduce((s: number, p: any) => s + (parseFloat(p.monto) || 0), 0);
+  const estado = totalPagado >= total ? 'pagado' : 'abonado';
+
   const { data: venta, error: ve } = await supabase
     .from('merch_ventas')
-    .insert({ servidor_id, servidor_nombre, cliente_nombre, cliente_correo, evento_id: evento_id || null, total })
+    .insert({ servidor_id, servidor_nombre, cliente_nombre, cliente_correo, evento_id: evento_id || null, total, estado })
     .select()
     .single();
 
@@ -149,4 +152,29 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json({ ok: true, venta });
+}
+
+export async function PUT(req: NextRequest) {
+  const supabase = createServerClient();
+  const { venta_id, metodo_pago, monto, referencia } = await req.json();
+
+  const { error: pe } = await supabase
+    .from('merch_pagos')
+    .insert({ venta_id, metodo_pago, monto, referencia: referencia || null });
+  if (pe) return NextResponse.json({ error: pe.message }, { status: 500 });
+
+  // Recalculate estado
+  const { data: ventaData } = await supabase
+    .from('merch_ventas')
+    .select('total, pagos:merch_pagos(monto)')
+    .eq('id', venta_id)
+    .single();
+
+  if (ventaData) {
+    const totalPagado = (ventaData.pagos as any[]).reduce((s: number, p: any) => s + Number(p.monto), 0);
+    const estado = totalPagado >= Number(ventaData.total) ? 'pagado' : 'abonado';
+    await supabase.from('merch_ventas').update({ estado }).eq('id', venta_id);
+  }
+
+  return NextResponse.json({ ok: true });
 }

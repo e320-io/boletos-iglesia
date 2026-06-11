@@ -95,6 +95,7 @@ export interface MerchVenta {
   cliente_nombre: string | null;
   cliente_correo: string | null;
   total: number;
+  estado: 'pagado' | 'abonado';
   created_at: string;
   detalle?: MerchVentaDetalle[];
   pagos?: MerchPagoVenta[];

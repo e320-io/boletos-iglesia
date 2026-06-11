@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
     if (inv) {
       await supabase
         .from('merch_inventario')
-        .update({ cantidad: Math.max(0, inv.cantidad - item.cantidad), updated_at: new Date().toISOString() })
+        .update({ cantidad: Math.max(0, inv.cantidad - item.cantidad) })
         .eq('variante_id', item.variante_id);
     }
   }

@@ -165,6 +165,11 @@ export default function MerchPOS({ onBack, user }: Props) {
       return;
     }
 
+    if (esAbono && !clienteNombre.trim()) {
+      setErrorMsg('Para registrar un abono debes anotar el nombre del cliente.');
+      return;
+    }
+
     setSaving(true);
     try {
       const res = await fetch('/api/merch/ventas', {
@@ -219,9 +224,9 @@ export default function MerchPOS({ onBack, user }: Props) {
     return (
       <div className="min-h-screen flex items-center justify-center p-6" style={{ background: 'var(--color-bg)' }}>
         <div className="text-center max-w-sm w-full">
-          <div className="text-6xl mb-4">✅</div>
+          <div className="text-6xl mb-4">{lastSaldo > 0 ? '🕐' : '✅'}</div>
           <h1 className="text-3xl font-bold mb-2" style={{ fontFamily: 'var(--font-display)' }}>
-            ¡Venta registrada!
+            {lastSaldo > 0 ? '¡Abono registrado!' : '¡Venta registrada!'}
           </h1>
           <div className="rounded-2xl border p-6 mb-6" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
             <p className="text-sm mb-1" style={{ color: 'var(--color-text-muted)' }}>Folio</p>
@@ -303,16 +308,24 @@ export default function MerchPOS({ onBack, user }: Props) {
             </div>
           </div>
 
-          {/* Customer info */}
-          <div className="rounded-xl border p-5 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>
-            <h3 className="font-semibold text-sm">Datos del cliente (opcional)</h3>
-            <div className="grid grid-cols-2 gap-3">
+          {/* Customer info — solo visible en abonos */}
+          {esAbono && (
+            <div className="rounded-xl border p-5 space-y-3"
+              style={{ borderColor: '#f59e0b', background: 'rgba(245,158,11,0.05)' }}>
+              <h3 className="font-semibold text-sm" style={{ color: '#f59e0b' }}>
+                Datos del cliente <span className="font-normal">(requerido para abonos)</span>
+              </h3>
               <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>Nombre</label>
+                <label className="block text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>
+                  Nombre <span style={{ color: '#ef4444' }}>*</span>
+                </label>
                 <input value={clienteNombre} onChange={e => setClienteNombre(e.target.value)}
                   placeholder="Nombre del cliente"
                   className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
+                  style={{
+                    borderColor: !clienteNombre.trim() ? '#ef4444' : 'var(--color-border)',
+                    background: 'var(--color-bg)', color: 'var(--color-text)',
+                  }} />
               </div>
               <div>
                 <label className="block text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>
@@ -324,20 +337,7 @@ export default function MerchPOS({ onBack, user }: Props) {
                   style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
               </div>
             </div>
-            {eventos.length > 0 && (
-              <div>
-                <label className="block text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>
-                  Asociar a evento (opcional)
-                </label>
-                <select value={eventoId} onChange={e => setEventoId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }}>
-                  <option value="">Sin evento</option>
-                  {eventos.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
-                </select>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Payment */}
           <div className="rounded-xl border p-5 space-y-3" style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)' }}>

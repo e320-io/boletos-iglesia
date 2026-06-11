@@ -63,6 +63,13 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
   const [abonoRef, setAbonoRef] = useState('');
   const [abonoSaving, setAbonoSaving] = useState(false);
 
+  // Abono modal
+  const [abonoVenta, setAbonoVenta] = useState<MerchVenta | null>(null);
+  const [abonoMetodo, setAbonoMetodo] = useState('efectivo');
+  const [abonoMonto, setAbonoMonto] = useState('');
+  const [abonoRef, setAbonoRef] = useState('');
+  const [abonoSaving, setAbonoSaving] = useState(false);
+
   const [toast, setToast] = useState('');
 
   const showToast = (msg: string) => {

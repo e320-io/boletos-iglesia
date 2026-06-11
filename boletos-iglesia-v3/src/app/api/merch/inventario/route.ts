@@ -27,8 +27,7 @@ export async function PUT(req: NextRequest) {
 
   const { data, error } = await supabase
     .from('merch_inventario')
-    .update({ cantidad, updated_at: new Date().toISOString() })
-    .eq('variante_id', variante_id)
+    .upsert({ variante_id, cantidad, updated_at: new Date().toISOString() }, { onConflict: 'variante_id' })
     .select()
     .single();
 

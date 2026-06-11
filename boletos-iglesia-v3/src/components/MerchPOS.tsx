@@ -73,7 +73,7 @@ export default function MerchPOS({ onBack, user }: Props) {
           ...p,
           variantes: (p.variantes || []).map((v: MerchVariante) => ({
             ...v,
-            stock: v.inventario?.[0]?.cantidad ?? 0,
+            stock: (Array.isArray(v.inventario) ? v.inventario[0]?.cantidad : (v.inventario as any)?.cantidad) ?? 0,
           })),
         }));
       setProductos(withStock);

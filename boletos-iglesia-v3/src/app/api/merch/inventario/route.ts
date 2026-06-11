@@ -25,12 +25,22 @@ export async function PUT(req: NextRequest) {
   const supabase = createServerClient();
   const { variante_id, cantidad } = await req.json();
 
-  const { data, error } = await supabase
+  // Try update first; if no row exists yet, insert one
+  const { data: updated, error: ue } = await supabase
     .from('merch_inventario')
-    .upsert({ variante_id, cantidad, updated_at: new Date().toISOString() }, { onConflict: 'variante_id' })
+    .update({ cantidad })
+    .eq('variante_id', variante_id)
     .select()
     .single();
 
+  if (!ue) return NextResponse.json(updated);
+
+  // Row doesn't exist — create it
+  const { data, error } = await supabase
+    .from('merch_inventario')
+    .insert({ variante_id, cantidad })
+    .select()
+    .single();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json(data);
 }

@@ -72,7 +72,7 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
         ...p,
         variantes: (p.variantes || []).map((v: MerchVariante) => ({
           ...v,
-          stock: v.inventario?.[0]?.cantidad ?? 0,
+          stock: (Array.isArray(v.inventario) ? v.inventario[0]?.cantidad : (v.inventario as any)?.cantidad) ?? 0,
         })),
       }));
       setProductos(withStock);
@@ -174,15 +174,20 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
     const cantidad = parseInt(stockEdits[varianteId]);
     if (isNaN(cantidad) || cantidad < 0) return;
     setStockSaving(prev => ({ ...prev, [varianteId]: true }));
-    await fetch('/api/merch/inventario', {
+    const res = await fetch('/api/merch/inventario', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ variante_id: varianteId, cantidad }),
     });
-    setStockEdits(prev => { const n = { ...prev }; delete n[varianteId]; return n; });
     setStockSaving(prev => ({ ...prev, [varianteId]: false }));
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      showToast(`Error: ${err.error ?? 'No se pudo guardar'}`);
+      return;
+    }
+    setStockEdits(prev => { const n = { ...prev }; delete n[varianteId]; return n; });
     showToast('Stock actualizado');
-    loadProductos();
+    await loadProductos();
   };
 
   const handleDeleteVariante = async (varianteId: string) => {

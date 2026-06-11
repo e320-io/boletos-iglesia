@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase';
 import nodemailer from 'nodemailer';
 
+export const dynamic = 'force-dynamic';
+
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {

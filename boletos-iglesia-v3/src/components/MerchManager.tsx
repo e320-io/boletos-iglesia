@@ -100,7 +100,11 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
     const dashData = await dashRes.json();
     const ventasData = await ventasRes.json();
     setDashboard(dashData);
-    if (Array.isArray(ventasData)) setVentas(ventasData);
+    if (Array.isArray(ventasData)) {
+      setVentas(ventasData);
+    } else {
+      console.error('[ventas GET error]', ventasData);
+    }
     setDashLoading(false);
   }, []);
 

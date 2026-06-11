@@ -37,6 +37,7 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
   const [pPrecio, setPPrecio] = useState('');
   const [pCategoria, setPCategoria] = useState('');
   const [pImagenUrl, setPImagenUrl] = useState('');
+  const [pUploadingImg, setPUploadingImg] = useState(false);
   const [pSaving, setPSaving] = useState(false);
 
   // Variant form
@@ -93,23 +94,24 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
 
   const loadDashboard = useCallback(async () => {
     setDashLoading(true);
-    const [dashRes, ventasRes] = await Promise.all([
-      fetch('/api/merch/dashboard'),
-      fetch('/api/merch/ventas?limit=50'),
-    ]);
-    const dashData = await dashRes.json();
-    const ventasData = await ventasRes.json();
-    setDashboard(dashData);
-    if (Array.isArray(ventasData)) {
-      setVentas(ventasData);
-    } else {
-      console.error('[ventas GET error]', ventasData);
+    try {
+      const [dashRes, ventasRes] = await Promise.all([
+        fetch('/api/merch/dashboard'),
+        fetch('/api/merch/ventas?limit=50'),
+      ]);
+      const dashData = await dashRes.json();
+      const ventasData = await ventasRes.json();
+      if (dashRes.ok) setDashboard(dashData);
+      if (Array.isArray(ventasData)) setVentas(ventasData);
+    } catch (e) {
+      console.error('loadDashboard error:', e);
+    } finally {
+      setDashLoading(false);
     }
-    setDashLoading(false);
   }, []);
 
   useEffect(() => { loadProductos(); }, []);
-  useEffect(() => { if (tab === 'finanzas') loadDashboard(); }, [tab]);
+  useEffect(() => { if (tab === 'finanzas') loadDashboard(); }, [tab, loadDashboard]);
 
   const openProductForm = (p?: MerchProducto) => {
     if (p) {
@@ -124,6 +126,22 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
       setPNombre(''); setPDesc(''); setPPrecio(''); setPCategoria(''); setPImagenUrl('');
     }
     setShowProductForm(true);
+  };
+
+  const handlePImageUpload = async (file: File) => {
+    setPUploadingImg(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/upload-imagen', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setPImagenUrl(data.url);
+    } catch (e: any) {
+      showToast(`Error al subir imagen: ${e.message}`);
+    } finally {
+      setPUploadingImg(false);
+    }
   };
 
   const handleSaveProducto = async () => {
@@ -793,12 +811,41 @@ export default function MerchManager({ onBack, user, onOpenPOS }: Props) {
                   style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
               </div>
               <div>
-                <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>
-                  URL de imagen
+                <label className="block text-xs font-medium mb-2" style={{ color: 'var(--color-text-muted)' }}>
+                  Imagen del producto
                 </label>
-                <input value={pImagenUrl} onChange={e => setPImagenUrl(e.target.value)} placeholder="https://..."
-                  className="w-full px-3 py-2.5 rounded-lg border text-sm"
-                  style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
+                <div className="flex gap-3 items-start">
+                  {pImagenUrl ? (
+                    <div className="relative flex-shrink-0" style={{ width: 120 }}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={pImagenUrl} alt="producto" className="rounded-lg" style={{ width: 120, height: 80, objectFit: 'cover' }} />
+                      <button onClick={() => setPImagenUrl('')} className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                        style={{ background: '#ef4444', color: '#fff' }}>✕</button>
+                    </div>
+                  ) : (
+                    <label className="flex flex-col items-center justify-center rounded-lg cursor-pointer transition-all"
+                      style={{ width: 120, height: 80, border: '2px dashed var(--color-border)', color: 'var(--color-text-muted)', flexShrink: 0 }}>
+                      <input type="file" accept="image/*" className="hidden" disabled={pUploadingImg}
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handlePImageUpload(f); e.target.value = ''; }} />
+                      {pUploadingImg ? (
+                        <span className="text-xs text-center px-2">Subiendo...</span>
+                      ) : (
+                        <>
+                          <span className="text-2xl mb-1">🖼️</span>
+                          <span className="text-[10px] text-center px-2">Subir imagen</span>
+                        </>
+                      )}
+                    </label>
+                  )}
+                  <div className="flex-1">
+                    <p className="text-xs mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                      O pega una URL directamente:
+                    </p>
+                    <input type="url" value={pImagenUrl} onChange={e => setPImagenUrl(e.target.value)}
+                      placeholder="https://..." className="w-full px-3 py-2.5 rounded-lg border text-sm"
+                      style={{ borderColor: 'var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)' }} />
+                  </div>
+                </div>
               </div>
             </div>
 

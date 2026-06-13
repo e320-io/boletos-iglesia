@@ -18,12 +18,13 @@ interface Props {
   allRegistros?: Registro[];
   esEncuentro?: boolean;
   precioActual?: number;
+  equipos?: any[];
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, precioActual, onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, precioActual, equipos = [], onBack, onRefresh, addToast }: Props) {
   const { user } = useAuth();
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -43,6 +44,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [editNacionId, setEditNacionId] = useState(registro.nacion_id || '');
   const [editStatus, setEditStatus] = useState(registro.status);
   const [editTipo, setEditTipo] = useState((registro as any).tipo || 'Encuentrista');
+  const [editEquipoId, setEditEquipoId] = useState(registro.equipo_id || '');
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -147,6 +149,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const precioChanged = !isLiquidado && precioActual !== undefined && precioActual !== Number(registro.precio_boleto);
   const saldo = montoTotalEfectivo - Number(registro.monto_pagado);
   const nacion = naciones.find(n => n.id === registro.nacion_id);
+  const equipo = equipos.find(e => e.id === registro.equipo_id);
   const pagos = (registro.pagos || []).sort((a: any, b: any) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
@@ -289,7 +292,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     if (!editNombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
     setLoading(true);
     try {
-      const updateData: any = { nombre: editNombre.trim(), telefono: editTelefono.trim() || null, correo: editCorreo.trim() || null, nacion_id: editNacionId || null, status: editStatus };
+      const updateData: any = { nombre: editNombre.trim(), telefono: editTelefono.trim() || null, correo: editCorreo.trim() || null, nacion_id: editNacionId || null, status: editStatus, equipo_id: equipos.length > 0 ? (editEquipoId || null) : undefined };
       if (esEncuentro) {
         updateData.tipo = editTipo;
         if (editTipo === 'Servidor') {
@@ -304,9 +307,13 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         .update(updateData)
         .eq('id', registro.id);
       if (error) throw error;
-      addToast('success', 'Registro actualizado');
+      const equipoCambiado = equipos.length > 0 && editEquipoId !== (registro.equipo_id || '');
+      const nuevoEquipo = equipos.find(e => e.id === editEquipoId);
+      const equipoAnterior = equipos.find(e => e.id === registro.equipo_id);
+      const equipoDetail = equipoCambiado ? ` — equipo: ${equipoAnterior?.nombre || 'ninguno'} → ${nuevoEquipo?.nombre || 'ninguno'}` : '';
+      addToast('success', equipoCambiado ? `Equipo cambiado a ${nuevoEquipo?.nombre}` : 'Registro actualizado');
       if (user) {
-        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_editado', detail: `${registro.nombre} → ${editNombre.trim()}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_editado', detail: `${registro.nombre} → ${editNombre.trim()}${equipoDetail}`, eventoId: registro.evento_id || undefined, registroId: registro.id });
       }
       setEditing(false); onRefresh(); onBack();
     } catch (error: any) {
@@ -388,6 +395,12 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                   <div>
                     <h2 className="text-2xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>{registro.nombre}</h2>
                     <div className="flex items-center gap-3 mt-2 flex-wrap">
+                      {equipo && (
+                        <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
+                          style={{ background: equipo.color + '30', color: equipo.color, border: `1px solid ${equipo.color}50` }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: equipo.color }} />⚑ {equipo.nombre}
+                        </span>
+                      )}
                       {nacion && (
                         <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
                           style={{ background: nacion.color + '30', color: nacion.color, border: `1px solid ${nacion.color}50` }}>
@@ -457,6 +470,25 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
                 </div>
+                {equipos.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Equipo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {equipos.map(eq => (
+                        <button key={eq.id} type="button" onClick={() => setEditEquipoId(eq.id)}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-all text-left"
+                          style={{
+                            borderColor: editEquipoId === eq.id ? eq.color : 'var(--color-border)',
+                            background: editEquipoId === eq.id ? eq.color + '20' : 'transparent',
+                            color: editEquipoId === eq.id ? eq.color : 'var(--color-text-muted)',
+                          }}>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
+                          <span className="truncate">{eq.nombre}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Nación</label>
                   <select value={editNacionId} onChange={e => setEditNacionId(e.target.value)}

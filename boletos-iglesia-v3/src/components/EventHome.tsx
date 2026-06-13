@@ -890,7 +890,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
             tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
-            precioActual={!isFreeEvent ? precioBoleto : undefined}
+            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 
@@ -1032,7 +1032,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'conferencistas' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
             tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
-            precioActual={!isFreeEvent ? precioBoleto : undefined}
+            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
       </main>

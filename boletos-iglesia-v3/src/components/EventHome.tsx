@@ -884,7 +884,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         {tab === 'registros' && !selectedRegistro && (
           <RegistrosList registros={regularRegistros} naciones={naciones} equipos={equipos}
             onSelect={userRole === 'dueno' ? () => {} : setSelectedRegistro}
-            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug?.toLowerCase().includes('encuentro')} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} />
+            onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug?.toLowerCase().includes('encuentro')} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} tieneAsientos={evento.tiene_asientos} />
         )}
 
         {tab === 'registros' && selectedRegistro && (

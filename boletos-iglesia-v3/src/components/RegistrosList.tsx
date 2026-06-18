@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { logActivity } from '@/lib/activity';
 import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion } from '@/types';
+import { seatLabel } from '@/lib/seatLabel';
 
 interface Props {
   registros: Registro[];
@@ -20,9 +21,10 @@ interface Props {
   userRole?: string;
   isFreeEvent?: boolean;
   readOnly?: boolean;
+  tieneAsientos?: boolean;
 }
 
-export default function RegistrosList({ registros, naciones, equipos = [], onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false, readOnly = false }: Props) {
+export default function RegistrosList({ registros, naciones, equipos = [], onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false, readOnly = false, tieneAsientos = false }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const canSeeMoney = userRole !== 'registro' && !isFreeEvent;
@@ -33,11 +35,17 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const [filterTipo, setFilterTipo] = useState<string>('todos');
   const [showCorte, setShowCorte] = useState(false);
   const [showColumnas, setShowColumnas] = useState(false);
+  const [sendingBulk, setSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ sent: number; total: number; current: string } | null>(null);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [bulkFilterEmails, setBulkFilterEmails] = useState('');
+  const [bulkSubject, setBulkSubject] = useState('');
   const [visibleColumns, setVisibleColumns] = useState<Record<string, boolean>>({
     telefono: false,
     correo: false,
     tipo: true,
     grupo: true,
+    asiento: true,
     status: true,
     pagado: true,
     saldo: true,
@@ -80,6 +88,61 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
         logActivity({ userId: user.id, userName: user.nombre, action: 'checkin_dia1', detail: registro.nombre, eventoId: eventoId, registroId: registro.id });
       }
       onRefresh();
+    }
+  };
+
+  const handleBulkResend = () => {
+    const allLiquidados = regularRegistros.filter(r => r.correo && r.status === 'liquidado');
+    if (allLiquidados.length === 0) {
+      addToast?.('info', 'No hay asistentes liquidados con correo registrado');
+      return;
+    }
+    setShowBulkModal(true);
+  };
+
+  const executeBulkSend = async () => {
+    const allLiquidados = regularRegistros.filter(r => r.correo && r.status === 'liquidado');
+    const filterList = bulkFilterEmails
+      .split(',')
+      .map(e => e.trim().toLowerCase())
+      .filter(Boolean);
+    const targets = filterList.length > 0
+      ? allLiquidados.filter(r => filterList.includes(r.correo!.toLowerCase()))
+      : allLiquidados;
+
+    if (targets.length === 0) {
+      addToast?.('info', 'Ningún correo coincide con asistentes liquidados');
+      return;
+    }
+
+    setShowBulkModal(false);
+    setSendingBulk(true);
+    let sent = 0;
+    let errors = 0;
+    for (const reg of targets) {
+      setBulkProgress({ sent, total: targets.length, current: reg.nombre });
+      try {
+        await fetch('/api/send-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            registroId: reg.id,
+            ...(bulkSubject.trim() ? { subjectOverride: bulkSubject.trim() } : {}),
+          }),
+        });
+        sent++;
+      } catch {
+        errors++;
+      }
+    }
+    setSendingBulk(false);
+    setBulkProgress(null);
+    setBulkFilterEmails('');
+    setBulkSubject('');
+    if (errors === 0) {
+      addToast?.('success', `Boletos enviados a ${sent} asistente${sent > 1 ? 's' : ''}`);
+    } else {
+      addToast?.('info', `Enviados: ${sent} · Errores: ${errors}`);
     }
   };
 
@@ -206,6 +269,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                 { key: 'correo', label: 'Correo' },
                 ...(hasTipos ? [{ key: 'tipo', label: 'Tipo' }] : []),
                 { key: 'grupo', label: hasEquipos ? 'Equipo' : 'Nación' },
+                ...(tieneAsientos ? [{ key: 'asiento', label: 'Asiento' }] : []),
                 ...(!isFreeEvent ? [{ key: 'status', label: 'Status' }] : []),
                 ...(canSeeMoney ? [{ key: 'pagado', label: 'Pagado' }, { key: 'saldo', label: 'Saldo' }] : []),
               ].map(col => (
@@ -219,6 +283,15 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             </>
           )}
         </div>
+        {!readOnly && !isFreeEvent && (
+          <button onClick={handleBulkResend} disabled={sendingBulk}
+            className="px-4 py-2.5 rounded-lg text-sm border transition-all text-slate-400 hover:text-white hover:border-emerald-400 disabled:opacity-50 disabled:cursor-not-allowed"
+            style={{ borderColor: 'var(--color-border)' }}>
+            {sendingBulk && bulkProgress
+              ? `Enviando ${bulkProgress.sent}/${bulkProgress.total}…`
+              : `✉️ Reenviar boletos (${regularRegistros.filter(r => r.correo && r.status === 'liquidado').length})`}
+          </button>
+        )}
         <button onClick={async () => {
           addToast?.('info', 'Generando PDF...');
           try {
@@ -264,6 +337,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             if (visibleColumns.correo) headRow.push('Correo');
             if (hasTipos && visibleColumns.tipo) headRow.push('Tipo');
             if (visibleColumns.grupo) headRow.push(hasEquipos ? 'Equipo' : 'Nación');
+            if (tieneAsientos && visibleColumns.asiento) headRow.push('Asiento');
             if (!isFreeEvent && visibleColumns.status) headRow.push('Status');
             if (canSeeMoney && visibleColumns.pagado) headRow.push('Pagado');
             if (canSeeMoney && visibleColumns.saldo) headRow.push('Saldo');
@@ -274,6 +348,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               if (visibleColumns.correo) row.push(r.correo || '—');
               if (hasTipos && visibleColumns.tipo) row.push((r as any).tipo || 'general');
               if (visibleColumns.grupo) row.push(hasEquipos ? ((r as any).equipo?.nombre || '—') : ((r as any).nacion?.nombre || '—'));
+              if (tieneAsientos && visibleColumns.asiento) row.push(r.asientos && r.asientos.length > 0 ? r.asientos.map(a => seatLabel(a)).join(', ') : '—');
               if (!isFreeEvent && visibleColumns.status) row.push(r.status.charAt(0).toUpperCase() + r.status.slice(1));
               if (canSeeMoney && visibleColumns.pagado) row.push(`$${Number(r.monto_pagado).toLocaleString()}`);
               if (canSeeMoney && visibleColumns.saldo) row.push(`$${(Number(r.monto_total) - Number(r.monto_pagado)).toLocaleString()}`);
@@ -474,6 +549,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             <tr style={{ background: 'var(--color-bg)' }}>
               {showCheckIn && <th className="text-center px-3 py-3 font-medium" style={{ color: '#10b981' }}>{showCheckIn2 ? 'Día 1' : 'Check-in'}</th>}
               {showCheckIn2 && <th className="text-center px-3 py-3 font-medium" style={{ color: '#f97316' }}>Día 2</th>}
+              {tieneAsientos && visibleColumns.asiento && <th className="text-center px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Asiento</th>}
               <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nombre</th>
               {visibleColumns.telefono && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Teléfono</th>}
               {visibleColumns.correo && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Correo</th>}
@@ -508,6 +584,15 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                       <button onClick={(e) => handleCheckIn2(e, r)}
                         className={`w-8 h-8 rounded-lg border-2 flex items-center justify-center transition-all text-sm font-bold ${
                           isCheckedIn2 ? 'bg-orange-500 border-orange-400 text-white' : 'border-slate-600 text-transparent hover:border-slate-400'}`}>✓</button>
+                    </td>
+                  )}
+                  {tieneAsientos && visibleColumns.asiento && (
+                    <td className="px-4 py-3 text-center">
+                      {(r.asientos && r.asientos.length > 0)
+                        ? <span className="text-xs font-mono font-bold px-2 py-0.5 rounded-md" style={{ background: 'rgba(139,92,246,0.15)', color: '#a78bfa' }}>
+                            {r.asientos.map(a => seatLabel(a)).join(', ')}
+                          </span>
+                        : <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>—</span>}
                     </td>
                   )}
                   <td className="px-4 py-3 font-medium">{r.nombre}</td>
@@ -555,6 +640,73 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
           </tbody>
         </table>
       </div>
+    {showBulkModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.6)' }}>
+        <div className="rounded-xl border w-full max-w-md p-6 shadow-2xl" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <h3 className="text-lg font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>✉️ Reenviar boletos</h3>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                Filtrar por correos <span className="opacity-50">(separados por coma — vacío = todos los liquidados)</span>
+              </label>
+              <textarea
+                value={bulkFilterEmails}
+                onChange={e => setBulkFilterEmails(e.target.value)}
+                placeholder="correo1@ejemplo.com, correo2@ejemplo.com"
+                rows={3}
+                className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent resize-none"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                Asunto del correo <span className="opacity-50">(vacío = asunto predeterminado)</span>
+              </label>
+              <input
+                type="text"
+                value={bulkSubject}
+                onChange={e => setBulkSubject(e.target.value)}
+                placeholder="Ej: Recordatorio Legacy Women"
+                className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+              />
+            </div>
+            {(() => {
+              const allLiquidados = regularRegistros.filter(r => r.correo && r.status === 'liquidado');
+              const filterList = bulkFilterEmails.split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+              const preview = filterList.length > 0
+                ? allLiquidados.filter(r => filterList.includes(r.correo!.toLowerCase()))
+                : allLiquidados;
+              return preview.length > 0 ? (
+                <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(0,188,212,0.06)', border: '1px solid rgba(0,188,212,0.2)', color: 'var(--color-text-muted)' }}>
+                  Se enviará a <strong style={{ color: 'var(--color-accent)' }}>{preview.length} asistente{preview.length > 1 ? 's' : ''}</strong>:
+                  <ul className="mt-1.5 space-y-0.5">
+                    {preview.slice(0, 5).map(r => <li key={r.id}>· {r.nombre} &lt;{r.correo}&gt;</li>)}
+                    {preview.length > 5 && <li style={{ color: 'var(--color-accent)' }}>… y {preview.length - 5} más</li>}
+                  </ul>
+                </div>
+              ) : (
+                <div className="rounded-lg p-3 text-xs" style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}>
+                  Ningún correo coincide con asistentes liquidados
+                </div>
+              );
+            })()}
+          </div>
+          <div className="flex gap-3 mt-6">
+            <button onClick={() => { setShowBulkModal(false); setBulkFilterEmails(''); setBulkSubject(''); }}
+              className="flex-1 py-2.5 rounded-lg text-sm border transition-all"
+              style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+              Cancelar
+            </button>
+            <button onClick={executeBulkSend}
+              className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white transition-all"
+              style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)' }}>
+              Enviar
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }

@@ -171,7 +171,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
   const centroAsientos = asientos.filter(a => a.seccion === 'centro');
   const hasCentro = centroAsientos.length > 0;
   // Derive rows dynamically so deleted rows (e.g. Z for legacy-women) disappear automatically
-  const bottomRows = [...new Set(centroAsientos.map(a => a.fila))].sort();
+  const bottomRows = Array.from(new Set(centroAsientos.map(a => a.fila))).sort();
 
   // allowSelectConferencistas overrides readOnly for the conferencistas section
   const confReadOnly = !allowSelectConferencistas;

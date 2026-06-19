@@ -170,6 +170,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
   const derAsientos = asientos.filter(a => a.seccion === 'derecha');
   const centroAsientos = asientos.filter(a => a.seccion === 'centro');
   const hasCentro = centroAsientos.length > 0;
+  // Derive rows dynamically so deleted rows (e.g. Z for legacy-women) disappear automatically
+  const bottomRows = [...new Set(centroAsientos.map(a => a.fila))].sort();
 
   // allowSelectConferencistas overrides readOnly for the conferencistas section
   const confReadOnly = !allowSelectConferencistas;
@@ -296,7 +298,7 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
         <div className="flex gap-8 justify-center">
           <div className="w-[408px] shrink-0" />
           <SeatSection
-            rows={SEAT_LAYOUT.bottom.rows}
+            rows={bottomRows}
             cols={SEAT_LAYOUT.bottom.cols}
             asientos={centroAsientos}
             selectedSeats={selectedSeats}

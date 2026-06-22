@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { registroId, grupoIds, isCortesia } = body;
+    const { registroId, grupoIds, isCortesia, subjectOverride } = body;
     const supabase = createServerClient();
 
     // Fetch main registro
@@ -376,9 +376,9 @@ export async function POST(request: NextRequest) {
 </body>
 </html>`;
 
-    const subject = isGrupo
+    const subject = subjectOverride || (isGrupo
       ? `${eventoNombre} — Comprobante de ${grupoBoletos.length} boletos - ${registro.nombre}`
-      : `${eventoNombre} — Comprobante de boleto - ${registro.nombre}`;
+      : `${eventoNombre} — Comprobante de boleto - ${registro.nombre}`);
 
     const info = await transporter.sendMail({
       from: `"${eventoNombre}" <${process.env.GMAIL_USER || 'registrornmx@gmail.com'}>`,

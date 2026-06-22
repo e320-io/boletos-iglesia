@@ -131,6 +131,17 @@ export interface GastoEvento {
   created_at: string;
 }
 
+export interface IngresoEvento {
+  id: string;
+  evento_id: string;
+  concepto: string;
+  monto: number;
+  metodo_pago: 'efectivo' | 'transferencia' | 'tarjeta' | 'otro';
+  fecha: string | null;
+  notas: string | null;
+  created_at: string;
+}
+
 export interface RegistroFormData {
   nombre: string;
   telefono: string;

@@ -6,6 +6,7 @@ import { logActivity } from '@/lib/activity';
 import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion } from '@/types';
 import { seatLabel } from '@/lib/seatLabel';
+import { METODOS_PAGO } from '@/lib/constants';
 
 interface Props {
   registros: Registro[];
@@ -33,6 +34,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const [filterEquipo, setFilterEquipo] = useState<string>('todos');
   const [filterCheckIn, setFilterCheckIn] = useState<string>('todos');
   const [filterTipo, setFilterTipo] = useState<string>('todos');
+  const [filterMetodoPago, setFilterMetodoPago] = useState<string>('todos');
   const [showCorte, setShowCorte] = useState(false);
   const [showColumnas, setShowColumnas] = useState(false);
   const [sendingBulk, setSendingBulk] = useState(false);
@@ -71,7 +73,9 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
       (filterCheckIn === 'checked_2' && (r as any).checked_in_2) ||
       (filterCheckIn === 'unchecked_2' && !(r as any).checked_in_2);
     const matchTipo = filterTipo === 'todos' || (r as any).tipo === filterTipo;
-    return matchSearch && matchStatus && matchNacion && matchEquipo && matchCheckIn && matchTipo;
+    const matchMetodo = filterMetodoPago === 'todos' ||
+      (r.pagos || []).some(p => p.metodo_pago === filterMetodoPago);
+    return matchSearch && matchStatus && matchNacion && matchEquipo && matchCheckIn && matchTipo && matchMetodo;
   });
 
   const handleCheckIn = async (e: React.MouseEvent, registro: Registro) => {
@@ -207,6 +211,14 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             <option value="pendiente">Pendiente</option>
             <option value="abono">Abono</option>
             <option value="liquidado">Liquidado</option>
+          </select>
+        )}
+        {!isFreeEvent && canSeeMoney && (
+          <select value={filterMetodoPago} onChange={e => setFilterMetodoPago(e.target.value)}
+            className="px-4 py-2.5 rounded-lg text-sm border"
+            style={{ borderColor: 'var(--color-border)', background: 'var(--color-surface)', color: 'var(--color-text)' }}>
+            <option value="todos">Todos los métodos</option>
+            {METODOS_PAGO.map(m => (<option key={m.value} value={m.value}>{m.icon} {m.label}</option>))}
           </select>
         )}
         {hasTipos && (

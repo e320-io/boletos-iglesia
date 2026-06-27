@@ -108,6 +108,32 @@ h1, h2, h3, h4, h5, h6 {
   box-shadow: 0 0 12px rgba(107, 76, 59, 0.5);
 }
 
+/* Legacy Varones custom seat colors (on dark theme): libre=blanco, ocupado=azul clarito */
+.legacy-varones .seat-disponible {
+  background: rgba(255, 255, 255, 0.92);
+  color: #1a2236;
+  border-color: #cbd5e1;
+}
+.legacy-varones .seat-disponible:hover {
+  background: #ffffff;
+  border-color: #00bcd4;
+  transform: scale(1.1);
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.3);
+}
+.legacy-varones .seat-ocupado {
+  background: #00bcd4;
+  color: #ffffff;
+  border-color: #0097a7;
+  cursor: default;
+}
+.legacy-varones .seat-selected {
+  background: #10b981;
+  color: white;
+  border-color: #059669;
+  transform: scale(1.1);
+  box-shadow: 0 0 12px rgba(16, 185, 129, 0.5);
+}
+
 .seat-no_disponible {
   background: rgba(239, 68, 68, 0.1);
   color: rgba(239, 68, 68, 0.4);

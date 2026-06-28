@@ -14,6 +14,10 @@ interface SeatMapProps {
   highlightSeats?: string[];
   /** When true, conferencistas seats start expanded and are selectable */
   allowSelectConferencistas?: boolean;
+  /** seatId → occupant name, shown in the seat tooltip on hover */
+  occupantNames?: Record<string, string>;
+  /** Check-in view: paint every seat white and only highlightSeats green */
+  checkInView?: boolean;
 }
 
 /** Single seat button — shared by the grid (3-block) and section layouts. */
@@ -27,6 +31,8 @@ function SeatButton({
   highlightSeats,
   allowSelectReservado,
   width,
+  name,
+  checkInView,
 }: {
   seat: Asiento;
   label: string;
@@ -37,6 +43,8 @@ function SeatButton({
   highlightSeats?: string[];
   allowSelectReservado?: boolean;
   width?: number;
+  name?: string;
+  checkInView?: boolean;
 }) {
   const isSelected = selectedSeats.includes(seat.id);
   const isHighlighted = highlightSeats?.includes(seat.id);
@@ -46,7 +54,12 @@ function SeatButton({
 
   let className = 'seat';
   if (isSelected || isHighlighted) className += ' seat-selected';
+  else if (checkInView) className += ' seat-disponible';
   else className += ` seat-${seat.estado}`;
+
+  const tooltip = name
+    ? `${label} — ${name}${checkInView ? (isHighlighted ? ' ✓ check-in' : ' (sin check-in)') : ''}`
+    : `${label} — ${isSelected ? 'Seleccionado' : seat.estado}`;
 
   return (
     <button
@@ -61,7 +74,7 @@ function SeatButton({
         ...(width ? { width } : {}),
         ...(isOccupied && onOccupiedClick ? { cursor: 'pointer' } : {}),
       }}
-      title={`${label} — ${isSelected ? 'Seleccionado' : seat.estado}`}
+      title={tooltip}
     >
       {label}
     </button>
@@ -78,6 +91,8 @@ function SeatSection({
   readOnly,
   highlightSeats,
   allowSelectReservado,
+  occupantNames,
+  checkInView,
 }: {
   rows: string[];
   cols: number[];
@@ -89,6 +104,8 @@ function SeatSection({
   highlightSeats?: string[];
   /** When true, 'reservado' seats become selectable (admin/cortesía only) */
   allowSelectReservado?: boolean;
+  occupantNames?: Record<string, string>;
+  checkInView?: boolean;
 }) {
   const asientoMap = new Map(asientos.map(a => [`${a.fila}${a.columna}`, a]));
 
@@ -120,6 +137,8 @@ function SeatSection({
                 readOnly={readOnly}
                 highlightSeats={highlightSeats}
                 allowSelectReservado={allowSelectReservado}
+                name={occupantNames?.[seat.id]}
+                checkInView={checkInView}
               />
             );
           })}
@@ -200,7 +219,7 @@ function ConferencistasSection({
   );
 }
 
-export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupiedClick, readOnly, highlightSeats, allowSelectConferencistas = false }: SeatMapProps) {
+export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupiedClick, readOnly, highlightSeats, allowSelectConferencistas = false, occupantNames, checkInView }: SeatMapProps) {
   const [confExpanded, setConfExpanded] = useState(allowSelectConferencistas);
 
   const confAsientos = asientos.filter(a => a.seccion === 'conferencistas');
@@ -303,6 +322,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
           highlightSeats={highlightSeats}
           // Apartados (RE) are assignable only in admin/cortesía contexts
           allowSelectReservado={allowSelectConferencistas}
+          name={occupantNames?.[seat.id]}
+          checkInView={checkInView}
         />
       );
     };
@@ -399,6 +420,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
           readOnly={readOnly}
           onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
+          occupantNames={occupantNames}
+          checkInView={checkInView}
         />
         <SeatSection
           rows={topRightRows}
@@ -409,6 +432,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
           readOnly={readOnly}
           onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
+          occupantNames={occupantNames}
+          checkInView={checkInView}
         />
       </div>
 
@@ -423,6 +448,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
           readOnly={readOnly}
           onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
+          occupantNames={occupantNames}
+          checkInView={checkInView}
         />
         <SeatSection
           rows={midRightRows}
@@ -433,6 +460,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
           readOnly={readOnly}
           onOccupiedClick={onOccupiedClick}
           highlightSeats={highlightSeats}
+          occupantNames={occupantNames}
+          checkInView={checkInView}
         />
       </div>
 
@@ -449,6 +478,8 @@ export default function SeatMap({ asientos, selectedSeats, onSeatClick, onOccupi
             readOnly={readOnly}
             onOccupiedClick={onOccupiedClick}
             highlightSeats={highlightSeats}
+            occupantNames={occupantNames}
+            checkInView={checkInView}
           />
         </div>
       )}

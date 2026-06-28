@@ -109,6 +109,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   const [confCorreo, setConfCorreo] = useState('');
   const [confSelectedSeat, setConfSelectedSeat] = useState<string | null>(null);
   const [cortesiaMode, setCortesiaMode] = useState(false);
+  const [mapCheckInView, setMapCheckInView] = useState(false);
 
   const addToast = useCallback((type: ToastMessage['type'], message: string) => {
     const id = Date.now();
@@ -336,10 +337,39 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
     }
   };
 
+  // Toggle check-in directly from the seat map (check-in view).
+  const handleSeatCheckIn = async (seat: Asiento) => {
+    if (!seat.registro_id) return;
+    const reg = registros.find(r => r.id === seat.registro_id);
+    if (!reg) return;
+    const next = !(reg as any).checked_in;
+    const { error } = await supabase
+      .from('registros')
+      .update({ checked_in: next, checked_in_at: next ? new Date().toISOString() : null })
+      .eq('id', reg.id);
+    if (error) { addToast('error', 'Error al actualizar check-in'); return; }
+    addToast('success', next ? `✓ Check-in: ${reg.nombre}` : `Check-in removido: ${reg.nombre}`);
+    if (user) logActivity({ userId: user.id, userName: user.nombre, action: 'checkin_dia1', detail: reg.nombre, eventoId: evento.id, registroId: reg.id });
+    fetchData();
+  };
+
   // Computed: separate conferencistas from regular registros
   const regularRegistros = registros.filter(r => (r as any).tipo !== 'conferencista');
   const confRegistros = registros.filter(r => (r as any).tipo === 'conferencista');
   const hasConfSeats = asientos.some(a => a.seccion === 'conferencistas');
+
+  // Seat → occupant name (tooltip) and the set of seats already checked in.
+  const registroById = new Map(registros.map(r => [r.id, r]));
+  const occupantNames: Record<string, string> = {};
+  for (const a of asientos) {
+    if (a.registro_id) {
+      const r = registroById.get(a.registro_id);
+      if (r) occupantNames[a.id] = r.nombre;
+    }
+  }
+  const checkInSeatIds = asientos
+    .filter(a => a.registro_id && (registroById.get(a.registro_id) as any)?.checked_in)
+    .map(a => a.id);
 
   const handleRegistroConferencista = async () => {
     if (!confNombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
@@ -516,16 +546,36 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
             {/* Seat map — always visible, interactive only when liquidando or cortesía */}
             {evento.tiene_asientos && (
               <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: cortesiaMode ? 'rgba(245,158,11,0.4)' : 'var(--color-border)' }}>
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)', color: cortesiaMode ? '#f59e0b' : undefined }}>
-                    {cortesiaMode ? '⭐ Selecciona asiento RE' : willBeLiquidado ? `Selecciona ${numBoletos} Asiento${numBoletos > 1 ? 's' : ''}` : 'Mapa de Asientos'}
+                <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+                  <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)', color: mapCheckInView ? '#10b981' : (cortesiaMode ? '#f59e0b' : undefined) }}>
+                    {mapCheckInView ? '✅ Check-in — quién ya está dentro' : cortesiaMode ? '⭐ Selecciona asiento RE' : willBeLiquidado ? `Selecciona ${numBoletos} Asiento${numBoletos > 1 ? 's' : ''}` : 'Mapa de Asientos'}
                   </h2>
-                  <div className="flex gap-4 text-xs">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
-                    {(willBeLiquidado || cortesiaMode) && (
-                      <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Seleccionado</span>
+                  <div className="flex items-center gap-4">
+                    {!cortesiaMode && (
+                      <button onClick={() => setMapCheckInView(v => !v)}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all"
+                        style={mapCheckInView
+                          ? { borderColor: '#10b981', background: 'rgba(16,185,129,0.12)', color: '#10b981' }
+                          : { borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>
+                        {mapCheckInView ? `✓ Check-in (${checkInSeatIds.length})` : '👀 Ver check-in'}
+                      </button>
                     )}
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
+                    <div className="flex gap-4 text-xs">
+                      {mapCheckInView ? (
+                        <>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded" style={{ background: '#10b981' }}></span>Adentro</span>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border" style={{ background: 'rgba(255,255,255,0.92)', borderColor: '#cbd5e1' }}></span>Aún no</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-emerald-600/40 border border-emerald-700/50"></span>Disponible</span>
+                          {(willBeLiquidado || cortesiaMode) && (
+                            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded border border-cyan-500" style={{ background: 'var(--color-accent)' }}></span>Seleccionado</span>
+                          )}
+                          <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded bg-cyan-600/30 border border-cyan-600/50"></span>Ocupado</span>
+                        </>
+                      )}
+                    </div>
                   </div>
                 </div>
                 {cortesiaMode && confSelectedSeat && (() => {
@@ -548,21 +598,37 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                     ))}
                   </div>
                 )}
-                {!cortesiaMode && !willBeLiquidado && (
+                {mapCheckInView && (
+                  <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.25)', color: '#10b981' }}>
+                    ✅ Toca un asiento ocupado para hacer o quitar su check-in. Pasa el cursor para ver el nombre.
+                  </div>
+                )}
+                {!cortesiaMode && !willBeLiquidado && !mapCheckInView && (
                   <div className="rounded-lg p-3 mb-4 text-xs" style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', color: '#f59e0b' }}>
                     👀 Vista de referencia — Liquida el boleto para seleccionar asiento.
                   </div>
                 )}
-                {cortesiaMode ? (
+                {mapCheckInView ? (
+                  <SeatMap asientos={asientos}
+                    selectedSeats={[]}
+                    onSeatClick={() => {}}
+                    onOccupiedClick={handleSeatCheckIn}
+                    readOnly={true}
+                    highlightSeats={checkInSeatIds}
+                    occupantNames={occupantNames}
+                    checkInView={true} />
+                ) : cortesiaMode ? (
                   <SeatMap asientos={asientos}
                     selectedSeats={confSelectedSeat ? [confSelectedSeat] : []}
                     onSeatClick={id => setConfSelectedSeat(prev => prev === id ? null : id)}
                     onOccupiedClick={handleOccupiedSeatClick}
                     readOnly={true}
+                    occupantNames={occupantNames}
                     allowSelectConferencistas={true} />
                 ) : (
                   <SeatMap asientos={asientos} selectedSeats={willBeLiquidado ? selectedSeats : []}
-                    onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} onOccupiedClick={handleOccupiedSeatClick} readOnly={!willBeLiquidado} />
+                    onSeatClick={willBeLiquidado ? handleSeatClick : () => {}} onOccupiedClick={handleOccupiedSeatClick} readOnly={!willBeLiquidado}
+                    occupantNames={occupantNames} />
                 )}
               </div>
             )}

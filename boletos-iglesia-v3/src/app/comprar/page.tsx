@@ -4,11 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { Asiento, Nacion } from '@/types';
 import SeatMap from '@/components/SeatMap';
+import { ROLES_INSTRUMENTO } from '@/lib/constants';
 
 interface Evento {
   id: string; nombre: string; slug: string; fecha: string; descripcion: string;
   precio_default: number; tiene_asientos: boolean; es_gratuito: boolean; usa_equipos: boolean;
   usa_fases_precio?: boolean;
+  usa_rol_instrumento?: boolean;
   imagen_url?: string | null;
 }
 
@@ -45,6 +47,8 @@ export default function ComprarPage() {
   const [edad, setEdad] = useState('');
   const [nacionId, setNacionId] = useState('');
   const [equipoId, setEquipoId] = useState('');
+  const [rol, setRol] = useState('');
+  const [rolOtro, setRolOtro] = useState('');
   const [numBoletos, setNumBoletos] = useState(1);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
   const [step, setStep] = useState<'eventos'|'datos'|'asientos'|'pago'>('eventos');
@@ -88,16 +92,17 @@ export default function ComprarPage() {
   }, []);
 
   const getPrecioEvento = (e: Evento) => preciosPorEvento[e.id] ?? e.precio_default;
-  const pick = (e: Evento) => { setEv(e); setFases([]); loadData(e); setStep('datos'); };
+  const pick = (e: Evento) => { setEv(e); setFases([]); setRol(''); setRolOtro(''); loadData(e); setStep('datos'); };
   const seatClick = (id: string) => setSelectedSeats(p => p.includes(id) ? p.filter(s=>s!==id) : p.length>=numBoletos ? [...p.slice(1),id] : [...p,id]);
-  const goAsientos = () => { if(!nombre.trim()){setError('Ingresa tu nombre');return;} if(!correo.trim()){setError('Ingresa tu correo');return;} setError(''); setStep(ev?.tiene_asientos?'asientos':'pago'); };
+  const goAsientos = () => { if(!nombre.trim()){setError('Ingresa tu nombre');return;} if(!correo.trim()){setError('Ingresa tu correo');return;} if(ev?.usa_rol_instrumento && rol==='Otro' && !rolOtro.trim()){setError('Especifica tu rol');return;} setError(''); setStep(ev?.tiene_asientos?'asientos':'pago'); };
   const goPago = () => { if(selectedSeats.length<numBoletos){setError(`Selecciona ${numBoletos} asiento${numBoletos>1?'s':''}`);return;} setError(''); setStep('pago'); };
 
   const checkout = async () => {
     if (!ev) return; setProcessing(true); setError('');
     try {
+      const rolFinal = ev.usa_rol_instrumento ? ((rol==='Otro' ? rolOtro.trim() : rol) || null) : null;
       const r = await fetch('/api/stripe/create-checkout-session', { method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ eventoId:ev.id, nombre:nombre.trim(), correo:correo.trim(), telefono:telefono.trim()||null, whatsapp:whatsapp.trim()||null, edad:edad||null, nacionId:nacionId||null, equipoId:equipoId||null, asientoIds:selectedSeats.length>0?selectedSeats:null, cantidad:numBoletos })});
+        body: JSON.stringify({ eventoId:ev.id, nombre:nombre.trim(), correo:correo.trim(), telefono:telefono.trim()||null, whatsapp:whatsapp.trim()||null, edad:edad||null, nacionId:nacionId||null, equipoId:equipoId||null, rol:rolFinal, asientoIds:selectedSeats.length>0?selectedSeats:null, cantidad:numBoletos })});
       const d = await r.json(); if(!r.ok) throw new Error(d.error);
       window.location.href = d.url;
     } catch(e:any){setError(e.message||'Error');setProcessing(false);}
@@ -336,6 +341,19 @@ export default function ComprarPage() {
                 {hasEq && equipos.some(e=>e.genero) && (
                   <div className="bp-field"><label className="bp-flabel">Edad</label><input type="number" className="bp-finput" value={edad} onChange={e=>setEdad(e.target.value)} placeholder="Tu edad" /></div>
                 )}
+                {ev.usa_rol_instrumento && (
+                  <div className="bp-field">
+                    <label className="bp-flabel">Rol</label>
+                    <select className="bp-finput" value={rol} onChange={e=>setRol(e.target.value)}>
+                      <option value="">Seleccionar...</option>
+                      {ROLES_INSTRUMENTO.map(r=><option key={r} value={r}>{r}</option>)}
+                      <option value="Otro">Otro</option>
+                    </select>
+                    {rol==='Otro' && (
+                      <input className="bp-finput" style={{marginTop:8}} value={rolOtro} onChange={e=>setRolOtro(e.target.value)} placeholder="¿Cuál rol?" />
+                    )}
+                  </div>
+                )}
                 <div className="bp-field">
                   <label className="bp-flabel">Nación</label>
                   <select className="bp-finput" value={nacionId} onChange={e=>setNacionId(e.target.value)}>
@@ -360,11 +378,16 @@ export default function ComprarPage() {
                           </button>
                         );
                       };
+                      const GENERO_LABELS: Record<string,string> = { mujeres: '♀ Mujeres', hombres: '♂ Hombres' };
                       const gs=Array.from(new Set(equipos.map((e:any)=>e.genero).filter(Boolean)));
-                      if(gs.length>0) return gs.map(g=>(<div key={g as string}>
-                        <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:'1.5px',textTransform:'uppercase',margin:'12px 0 6px'}}>{g==='mujeres'?'♀ Mujeres':'♂ Hombres'}</div>
-                        {equipos.filter((eq:any)=>eq.genero===g).map(eqBtn)}
-                      </div>));
+                      const sinGenero=equipos.filter((eq:any)=>!eq.genero);
+                      if(gs.length>0) return (<>
+                        {gs.map(g=>(<div key={g as string}>
+                          <div style={{fontSize:10,fontWeight:700,color:'#aaa',letterSpacing:'1.5px',textTransform:'uppercase',margin:'12px 0 6px'}}>{GENERO_LABELS[g as string]||g}</div>
+                          {equipos.filter((eq:any)=>eq.genero===g).map(eqBtn)}
+                        </div>))}
+                        {sinGenero.length>0 && <div>{sinGenero.map(eqBtn)}</div>}
+                      </>);
                       return equipos.map(eqBtn);
                     })()}
                   </div>

@@ -22,6 +22,7 @@ export async function GET() {
         monto,
         metodo_pago,
         created_at,
+        reembolsado,
         registro:registros(
           evento_id,
           evento:eventos(nombre)
@@ -32,6 +33,25 @@ export async function GET() {
 
     if (error) throw error;
 
+    // Reembolsos procesados hoy: el dinero sale de caja hoy aunque el pago
+    // original sea de otro día, así que se filtra por reembolsado_at, no created_at.
+    const { data: reembolsos, error: reembolsosError } = await supabase
+      .from('pagos')
+      .select(`
+        monto_reembolsado,
+        metodo_pago,
+        reembolsado_at,
+        registro:registros(
+          evento_id,
+          evento:eventos(nombre)
+        )
+      `)
+      .eq('reembolsado', true)
+      .gte('reembolsado_at', cutoff.toISOString())
+      .limit(20000);
+
+    if (reembolsosError) throw reembolsosError;
+
     const eventoMap = new Map<string, {
       nombre: string;
       efectivo: number;
@@ -41,8 +61,23 @@ export async function GET() {
       otro: number;
     }>();
 
+    const getEvento = (eventoId: string, eventoNombre: string) => {
+      if (!eventoMap.has(eventoId)) {
+        eventoMap.set(eventoId, { nombre: eventoNombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
+      }
+      return eventoMap.get(eventoId)!;
+    };
+
+    const addToMetodo = (ev: ReturnType<typeof getEvento>, metodo: string, monto: number) => {
+      if (metodo === 'efectivo') ev.efectivo += monto;
+      else if (metodo === 'tarjeta') ev.tarjeta += monto;
+      else if (metodo === 'transferencia') ev.transferencia += monto;
+      else if (metodo === 'stripe') ev.stripe += monto;
+      else ev.otro += monto;
+    };
+
     for (const p of pagos || []) {
-      if (!p.created_at) continue;
+      if (p.reembolsado || !p.created_at) continue;
       const pagoDateMX = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
       if (pagoDateMX !== todayMX) continue;
 
@@ -50,18 +85,21 @@ export async function GET() {
       const eventoId = registro?.evento_id as string | null;
       if (!eventoId) continue;
 
-      if (!eventoMap.has(eventoId)) {
-        const eventoNombre = registro?.evento?.nombre ?? eventoId;
-        eventoMap.set(eventoId, { nombre: eventoNombre, efectivo: 0, tarjeta: 0, transferencia: 0, stripe: 0, otro: 0 });
-      }
+      const ev = getEvento(eventoId, registro?.evento?.nombre ?? eventoId);
+      addToMetodo(ev, p.metodo_pago, Number(p.monto));
+    }
 
-      const ev = eventoMap.get(eventoId)!;
-      const monto = Number(p.monto);
-      if (p.metodo_pago === 'efectivo') ev.efectivo += monto;
-      else if (p.metodo_pago === 'tarjeta') ev.tarjeta += monto;
-      else if (p.metodo_pago === 'transferencia') ev.transferencia += monto;
-      else if (p.metodo_pago === 'stripe') ev.stripe += monto;
-      else ev.otro += monto;
+    for (const p of reembolsos || []) {
+      if (!p.reembolsado_at) continue;
+      const reembolsoDateMX = new Date(p.reembolsado_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+      if (reembolsoDateMX !== todayMX) continue;
+
+      const registro = p.registro as any;
+      const eventoId = registro?.evento_id as string | null;
+      if (!eventoId) continue;
+
+      const ev = getEvento(eventoId, registro?.evento?.nombre ?? eventoId);
+      addToMetodo(ev, p.metodo_pago, -Number(p.monto_reembolsado));
     }
 
     const result = Array.from(eventoMap.entries())

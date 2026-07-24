@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import { METODOS_PAGO } from '@/lib/constants';
+import { METODOS_PAGO, ROLES_INSTRUMENTO } from '@/lib/constants';
 import { logActivity } from '@/lib/activity';
 import { useAuth } from '@/lib/auth';
 import type { Registro, Nacion, Asiento, MetodoPago } from '@/types';
@@ -17,14 +17,16 @@ interface Props {
   tieneAsientos?: boolean;
   allRegistros?: Registro[];
   esEncuentro?: boolean;
+  usaRolInstrumento?: boolean;
   precioActual?: number;
   equipos?: any[];
+  areasServicio?: any[];
   onBack: () => void;
   onRefresh: () => void;
   addToast: (type: 'success' | 'error' | 'info', message: string) => void;
 }
 
-export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, precioActual, equipos = [], onBack, onRefresh, addToast }: Props) {
+export default function RegistroDetail({ registro, naciones, asientos = [], tieneAsientos = false, allRegistros = [], esEncuentro = false, usaRolInstrumento = false, precioActual, equipos = [], areasServicio = [], onBack, onRefresh, addToast }: Props) {
   const { user } = useAuth();
   const [montoAbono, setMontoAbono] = useState('');
   const [metodoPago, setMetodoPago] = useState<MetodoPago>('efectivo');
@@ -43,11 +45,25 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const [editCorreo, setEditCorreo] = useState(registro.correo || '');
   const [editNacionId, setEditNacionId] = useState(registro.nacion_id || '');
   const [editStatus, setEditStatus] = useState(registro.status);
-  const [editTipo, setEditTipo] = useState((registro as any).tipo || 'Encuentrista');
+  const [editTipo, setEditTipo] = useState((registro as any).tipo || (esEncuentro ? 'Encuentrista' : 'general'));
   const [editEquipoId, setEditEquipoId] = useState(registro.equipo_id || '');
+  const [editAreaServicioId, setEditAreaServicioId] = useState(registro.area_servicio_id || '');
+  const rolActual = (registro as any).rol || '';
+  const rolActualEsFijo = (ROLES_INSTRUMENTO as readonly string[]).includes(rolActual);
+  const [editRol, setEditRol] = useState(rolActual ? (rolActualEsFijo ? rolActual : 'Otro') : '');
+  const [editRolOtro, setEditRolOtro] = useState(rolActual && !rolActualEsFijo ? rolActual : '');
 
   // Delete confirmation
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Reembolso de boleto completo
+  const [showRefundConfirm, setShowRefundConfirm] = useState(false);
+  const [refundMotivo, setRefundMotivo] = useState('');
+
+  // Reembolso de un pago individual
+  const [refundingPagoId, setRefundingPagoId] = useState<string | null>(null);
+  const [refundPagoMonto, setRefundPagoMonto] = useState('');
+  const [refundPagoMotivo, setRefundPagoMotivo] = useState('');
 
   // Edit payment date
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
@@ -150,6 +166,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
   const saldo = montoTotalEfectivo - Number(registro.monto_pagado);
   const nacion = naciones.find(n => n.id === registro.nacion_id);
   const equipo = equipos.find(e => e.id === registro.equipo_id);
+  const areaServicio = areasServicio.find(a => a.id === registro.area_servicio_id);
   const pagos = (registro.pagos || []).sort((a: any, b: any) =>
     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
@@ -301,6 +318,14 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
           updateData.monto_pagado = 150;
           updateData.status = 'liquidado';
         }
+      } else if (areasServicio.length > 0) {
+        updateData.tipo = editTipo;
+        updateData.equipo_id = editTipo === 'Servidor' ? null : (editEquipoId || null);
+        updateData.area_servicio_id = editTipo === 'Servidor' ? (editAreaServicioId || null) : null;
+      }
+      if (usaRolInstrumento) {
+        if (editRol === 'Otro' && !editRolOtro.trim()) { addToast('error', 'Especifica el rol'); setLoading(false); return; }
+        updateData.rol = editRol === 'Otro' ? editRolOtro.trim() || null : (editRol || null);
       }
       const { error } = await supabase
         .from('registros')
@@ -338,6 +363,57 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     } finally { setLoading(false); }
   };
 
+  const handleRefundRegistro = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch('/api/registro/reembolso', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registro_id: registro.id, motivo: refundMotivo.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al reembolsar');
+      addToast('success', `Boleto de "${registro.nombre}" reembolsado`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'registro_reembolsado',
+          detail: `${registro.nombre} — $${Number(registro.monto_pagado).toLocaleString()}${refundMotivo.trim() ? ` — Motivo: ${refundMotivo.trim()}` : ''}`,
+          eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
+      setShowRefundConfirm(false); setRefundMotivo('');
+      onRefresh(); onBack();
+    } catch (error: any) {
+      addToast('error', `Error: ${error.message}`);
+    } finally { setLoading(false); }
+  };
+
+  const handleRefundPago = async (pagoId: string, montoOriginal: number) => {
+    const montoNum = parseFloat(refundPagoMonto);
+    if (!montoNum || montoNum <= 0 || montoNum > montoOriginal) {
+      addToast('error', 'Ingresa un monto válido para reembolsar');
+      return;
+    }
+    setLoading(true);
+    try {
+      const res = await fetch('/api/pagos/reembolso', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pago_id: pagoId, monto_reembolsado: montoNum, motivo: refundPagoMotivo.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al reembolsar');
+      addToast('success', `Reembolso de $${montoNum.toLocaleString()} registrado`);
+      if (user) {
+        await logActivity({ userId: user.id, userName: user.nombre, action: 'pago_reembolsado',
+          detail: `$${montoNum.toLocaleString()} — ${registro.nombre}${refundPagoMotivo.trim() ? ` — Motivo: ${refundPagoMotivo.trim()}` : ''}`,
+          eventoId: registro.evento_id || undefined, registroId: registro.id });
+      }
+      setRefundingPagoId(null); setRefundPagoMonto(''); setRefundPagoMotivo('');
+      onRefresh(); onBack();
+    } catch (error: any) {
+      addToast('error', `Error: ${error.message}`);
+    } finally { setLoading(false); }
+  };
+
   const handleResendEmail = async () => {
     if (!registro.correo) { addToast('error', 'No hay correo registrado'); return; }
     try {
@@ -352,7 +428,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
     pendiente: 'bg-red-500/20 text-red-400 border-red-500/30',
     abono: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     liquidado: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    reembolsado: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
   };
+  const isReembolsado = registro.status === 'reembolsado';
+  const ultimoPagoReembolsado = pagos.find((p: any) => p.reembolsado);
   const metodoPagoLabels: Record<string, string> = {
     efectivo: '💵 Efectivo', transferencia: '🏦 Transferencia', tarjeta: '💳 Tarjeta', otro: '📋 Otro', stripe: '💳 Stripe (en línea)',
   };
@@ -384,6 +463,32 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         </div>
       )}
 
+      {/* Refund confirmation modal */}
+      {showRefundConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(0,0,0,0.7)' }}>
+          <div className="rounded-xl p-6 border max-w-md w-full mx-4" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <div className="text-center mb-4">
+              <div className="w-16 h-16 rounded-full mx-auto mb-3 flex items-center justify-center text-3xl" style={{ background: 'rgba(148,163,184,0.1)' }}>↩️</div>
+              <h3 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>¿Reembolsar boleto?</h3>
+              <p className="text-sm mt-2" style={{ color: 'var(--color-text-muted)' }}>
+                Vas a reembolsar ${Number(registro.monto_pagado).toLocaleString()} de <strong>{registro.nombre}</strong>. El boleto pasa a &quot;Reembolsado&quot; y su asiento se libera. El dinero se devuelve fuera del sistema.
+              </p>
+            </div>
+            <div className="mb-4">
+              <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Motivo (opcional)</label>
+              <input type="text" value={refundMotivo} onChange={e => setRefundMotivo(e.target.value)} placeholder="Ej: no pudo asistir..."
+                className="w-full px-3 py-2 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => { setShowRefundConfirm(false); setRefundMotivo(''); }} className="flex-1 py-2.5 rounded-lg text-sm font-medium border hover:bg-white/5"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>Cancelar</button>
+              <button onClick={handleRefundRegistro} disabled={loading} className="flex-1 py-2.5 rounded-lg text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: '#64748b' }}>{loading ? 'Procesando...' : 'Sí, reembolsar'}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className={`grid grid-cols-1 ${canAssignSeat ? 'xl:grid-cols-[420px_1fr]' : 'lg:grid-cols-[1fr_400px]'} gap-6`}>
         {/* Left: Info */}
         <div className="space-y-6">
@@ -401,6 +506,12 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                           <span className="w-2 h-2 rounded-full" style={{ background: equipo.color }} />⚑ {equipo.nombre}
                         </span>
                       )}
+                      {areaServicio && (
+                        <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
+                          style={{ background: areaServicio.color + '30', color: areaServicio.color, border: `1px solid ${areaServicio.color}50` }}>
+                          <span className="w-2 h-2 rounded-full" style={{ background: areaServicio.color }} />🛠 {areaServicio.nombre}
+                        </span>
+                      )}
                       {nacion && (
                         <span className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-full"
                           style={{ background: nacion.color + '30', color: nacion.color, border: `1px solid ${nacion.color}50` }}>
@@ -410,6 +521,11 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       {(registro as any).tipo && (registro as any).tipo !== 'general' && (
                         <span className={`text-xs px-2 py-0.5 rounded-full ${(registro as any).tipo === 'Servidor' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-500/20 text-slate-400'}`}>
                           {(registro as any).tipo}
+                        </span>
+                      )}
+                      {(registro as any).rol && (
+                        <span className="text-xs px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
+                          🎵 {(registro as any).rol}
                         </span>
                       )}
                       <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${statusColors[registro.status]}`}>
@@ -422,6 +538,10 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>📧</button>
                     <button onClick={() => setEditing(true)} className="px-3 py-2 rounded-lg text-xs border hover:border-amber-500 hover:text-amber-400"
                       style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>✏️</button>
+                    {!isReembolsado && Number(registro.monto_pagado) > 0 && (
+                      <button onClick={() => setShowRefundConfirm(true)} className="px-3 py-2 rounded-lg text-xs border hover:border-slate-400 hover:text-slate-300"
+                        style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }} title="Reembolsar boleto completo">↩️</button>
+                    )}
                     <button onClick={() => setShowDeleteConfirm(true)} className="px-3 py-2 rounded-lg text-xs border hover:border-red-500 hover:text-red-400"
                       style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}>🗑️</button>
                   </div>
@@ -470,7 +590,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                       className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                   </div>
                 </div>
-                {equipos.length > 0 && (
+                {equipos.length > 0 && editTipo !== 'Servidor' && (
                   <div>
                     <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Equipo</label>
                     <div className="grid grid-cols-2 gap-2">
@@ -484,6 +604,25 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                           }}>
                           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
                           <span className="truncate">{eq.nombre}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {areasServicio.length > 0 && editTipo === 'Servidor' && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Área de Servicio</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {areasServicio.map(area => (
+                        <button key={area.id} type="button" onClick={() => setEditAreaServicioId(area.id)}
+                          className="flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm border transition-all text-left"
+                          style={{
+                            borderColor: editAreaServicioId === area.id ? area.color : 'var(--color-border)',
+                            background: editAreaServicioId === area.id ? area.color + '20' : 'transparent',
+                            color: editAreaServicioId === area.id ? area.color : 'var(--color-text-muted)',
+                          }}>
+                          <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: area.color }} />
+                          <span className="truncate">{area.nombre}</span>
                         </button>
                       ))}
                     </div>
@@ -523,6 +662,38 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                     </div>
                   </div>
                 )}
+                {!esEncuentro && areasServicio.length > 0 && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['general', 'Servidor'].map(t => (
+                        <button key={t} onClick={() => setEditTipo(t)}
+                          className={`px-3 py-2 rounded-lg text-sm border transition-all ${editTipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                          style={editTipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                          {t === 'Servidor' ? '⭐ Servidor' : '👤 Campista'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {usaRolInstrumento && (
+                  <div>
+                    <label className="block text-xs font-medium mb-1" style={{ color: 'var(--color-text-muted)' }}>Rol</label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[...ROLES_INSTRUMENTO, 'Otro'].map(r => (
+                        <button key={r} onClick={() => setEditRol(r)}
+                          className={`px-3 py-2 rounded-lg text-sm border transition-all ${editRol === r ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                          style={editRol === r ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                          {r}
+                        </button>
+                      ))}
+                    </div>
+                    {editRol === 'Otro' && (
+                      <input type="text" value={editRolOtro} onChange={e => setEditRolOtro(e.target.value)} placeholder="¿Cuál rol?"
+                        className="w-full mt-2 px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    )}
+                  </div>
+                )}
                 <button onClick={handleEdit} disabled={loading} className="w-full py-3 rounded-lg font-bold text-white disabled:opacity-40"
                   style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                   {loading ? 'Guardando...' : 'Guardar cambios'}
@@ -530,6 +701,20 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
               </div>
             )}
           </div>
+
+          {/* Reembolso banner */}
+          {!editing && isReembolsado && (
+            <div className="rounded-xl p-4 border flex items-center gap-3" style={{ background: 'rgba(148,163,184,0.08)', borderColor: '#64748b' }}>
+              <span className="text-2xl">↩️</span>
+              <div className="text-sm">
+                <p className="font-bold" style={{ color: '#94a3b8' }}>Boleto reembolsado</p>
+                <p style={{ color: 'var(--color-text-muted)' }}>
+                  {ultimoPagoReembolsado?.reembolsado_at && new Date(ultimoPagoReembolsado.reembolsado_at).toLocaleDateString('es-MX', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  {ultimoPagoReembolsado?.motivo_reembolso && ` · Motivo: ${ultimoPagoReembolsado.motivo_reembolso}`}
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Grupo de boletos */}
           {!editing && isGrupo && (
@@ -711,29 +896,61 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
                               <button onClick={() => setEditingPaymentId(null)}
                                 className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
                             </div>
+                          ) : refundingPagoId === p.id ? (
+                            <div className="space-y-2 mt-1">
+                              <div className="relative w-32">
+                                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--color-text-muted)' }}>$</span>
+                                <input type="number" value={refundPagoMonto} onChange={e => setRefundPagoMonto(e.target.value)}
+                                  className="w-full pl-5 pr-2 py-1 rounded text-xs border bg-transparent"
+                                  style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                              </div>
+                              <input type="text" value={refundPagoMotivo} onChange={e => setRefundPagoMotivo(e.target.value)}
+                                placeholder="Motivo (opcional)"
+                                className="w-full px-2 py-1 rounded text-xs border bg-transparent"
+                                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                              <div className="flex gap-2">
+                                <button onClick={() => handleRefundPago(p.id, Number(p.monto))} disabled={loading}
+                                  className="text-xs px-2 py-1 rounded text-white disabled:opacity-50" style={{ background: '#64748b' }}>Reembolsar</button>
+                                <button onClick={() => { setRefundingPagoId(null); setRefundPagoMonto(''); setRefundPagoMotivo(''); }}
+                                  className="text-xs px-2 py-1 rounded" style={{ color: 'var(--color-text-muted)' }}>Cancelar</button>
+                              </div>
+                            </div>
                           ) : (
-                            <div className="text-xs flex items-center gap-2 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                            <div className="text-xs flex items-center gap-2 mt-0.5 flex-wrap" style={{ color: 'var(--color-text-muted)' }}>
                               {new Date(p.created_at).toLocaleDateString('es-MX', { weekday: 'short', day: 'numeric', month: 'short' })}
                               {p.referencia && ` · Ref: ${p.referencia}`}
-                              {editingMethodId !== p.id && (
-                                <>
-                                  <button onClick={() => {
-                                    setEditingPaymentId(p.id);
-                                    setEditPaymentDate(new Date(p.created_at).toISOString().split('T')[0]);
-                                    setEditingMethodId(null);
-                                  }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar fecha</button>
-                                  <button onClick={() => {
-                                    setEditingMethodId(p.id);
-                                    setEditMethodValue(p.metodo_pago as MetodoPago);
-                                    setEditMethodRef(p.referencia || '');
-                                    setEditingPaymentId(null);
-                                  }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar método</button>
-                                </>
+                              {p.reembolsado ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold" style={{ background: 'rgba(148,163,184,0.15)', color: '#94a3b8' }}>
+                                  Reembolsado{p.motivo_reembolso ? ` · ${p.motivo_reembolso}` : ''}
+                                </span>
+                              ) : (
+                                editingMethodId !== p.id && (
+                                  <>
+                                    <button onClick={() => {
+                                      setEditingPaymentId(p.id);
+                                      setEditPaymentDate(new Date(p.created_at).toISOString().split('T')[0]);
+                                      setEditingMethodId(null);
+                                    }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar fecha</button>
+                                    <button onClick={() => {
+                                      setEditingMethodId(p.id);
+                                      setEditMethodValue(p.metodo_pago as MetodoPago);
+                                      setEditMethodRef(p.referencia || '');
+                                      setEditingPaymentId(null);
+                                    }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>editar método</button>
+                                    <button onClick={() => {
+                                      setRefundingPagoId(p.id);
+                                      setRefundPagoMonto(String(p.monto));
+                                      setRefundPagoMotivo('');
+                                      setEditingMethodId(null);
+                                      setEditingPaymentId(null);
+                                    }} className="underline text-[10px] hover:text-white" style={{ color: 'var(--color-text-muted)' }}>reembolsar</button>
+                                  </>
+                                )
                               )}
                             </div>
                           )}
                         </div>
-                        <div className="text-lg font-bold text-emerald-400">+${Number(p.monto).toLocaleString()}</div>
+                        <div className={`text-lg font-bold ${p.reembolsado ? 'text-slate-400 line-through' : 'text-emerald-400'}`}>+${Number(p.monto).toLocaleString()}</div>
                       </div>
                     </div>
                   ))}
@@ -747,7 +964,7 @@ export default function RegistroDetail({ registro, naciones, asientos = [], tien
         {!editing && (
           <div className="space-y-4">
             {/* Abono section */}
-            {saldo > 0 && (
+            {saldo > 0 && !isReembolsado && (
               <div className="rounded-xl p-6 border h-fit sticky top-6" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
                 <h3 className="font-bold mb-5" style={{ fontFamily: 'var(--font-display)' }}>Registrar Abono</h3>
                 <div className="space-y-4">

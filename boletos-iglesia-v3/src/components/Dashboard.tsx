@@ -216,10 +216,11 @@ interface Props {
   eventoNombre?: string;
   isFreeEvent?: boolean;
   equipos?: any[];
+  areasServicio?: any[];
   isEncuentro?: boolean;
 }
 
-export default function Dashboard({ registros: allRegistros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [], isEncuentro = false }: Props) {
+export default function Dashboard({ registros: allRegistros, asientos, naciones, eventoFecha, eventoNombre, isFreeEvent = false, equipos = [], areasServicio = [], isEncuentro = false }: Props) {
   const [filterMode, setFilterMode] = useState<'all' | 'week'>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [expandedEquipo, setExpandedEquipo] = useState<string | null>(null);
@@ -357,20 +358,26 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
   const maxNacionCount = nacionRanking.length > 0 ? nacionRanking[0].count : 1;
 
   const hasEquipos = equipos.length > 0;
-  const equipoRanking = equipos
-    .map(eq => {
-      const regs = registros.filter(r => r.equipo_id === eq.id);
-      return {
-        ...eq,
-        count: regs.length,
-        liquidados: regs.filter(r => r.status === 'liquidado').length,
-        abonos: regs.filter(r => r.status === 'abono').length,
-        pendientes: regs.filter(r => r.status === 'pendiente').length,
-        recaudado: regs.reduce((s, r) => s + Number(r.monto_pagado), 0),
-        porCobrar: regs.reduce((s, r) => s + (Number(r.monto_total) - Number(r.monto_pagado)), 0),
-        miembros: regs,
-      };
-    })
+  const hasAreasServicio = areasServicio.length > 0;
+
+  const buildRankingEntry = (item: any, regs: Registro[], grupo: 'equipo' | 'area') => ({
+    ...item,
+    grupo,
+    count: regs.length,
+    liquidados: regs.filter(r => r.status === 'liquidado').length,
+    abonos: regs.filter(r => r.status === 'abono').length,
+    pendientes: regs.filter(r => r.status === 'pendiente').length,
+    recaudado: regs.reduce((s, r) => s + Number(r.monto_pagado), 0),
+    porCobrar: regs.reduce((s, r) => s + (Number(r.monto_total) - Number(r.monto_pagado)), 0),
+    miembros: regs,
+  });
+
+  // Equipos y Áreas de Servicio se combinan en un solo ranking (las áreas de servicio
+  // funcionan como "equipos" de servidores dentro de la misma vista).
+  const equipoRanking = [
+    ...equipos.map(eq => buildRankingEntry(eq, registros.filter(r => r.equipo_id === eq.id), 'equipo')),
+    ...areasServicio.map(area => buildRankingEntry(area, registros.filter(r => r.area_servicio_id === area.id), 'area')),
+  ]
     .filter(eq => eq.count > 0)
     .sort((a, b) => b.recaudado - a.recaudado);
 
@@ -531,6 +538,37 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
                 )}
               </div>
             )}
+          </div>
+        );
+      })()}
+
+      {/* Campamento: Campistas vs Servidores */}
+      {hasAreasServicio && !isEncuentro && (() => {
+        const campistas = registros.filter(r => (r as any).tipo !== 'Servidor');
+        const servidores = registros.filter(r => (r as any).tipo === 'Servidor');
+        const campistasCheckin = campistas.filter(r => r.checked_in).length;
+        const servidoresCheckin = servidores.filter(r => r.checked_in).length;
+        return (
+          <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+            <h3 className="font-bold mb-4" style={{ fontFamily: 'var(--font-display)' }}>Campistas y Servidores</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-xl p-4 border text-center" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                <div className="text-3xl font-bold text-sky-400" style={{ fontFamily: 'var(--font-display)' }}>
+                  {campistasCheckin}
+                  <span className="text-base font-normal text-slate-500 ml-1">/ {campistas.length}</span>
+                </div>
+                <div className="text-xs mt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>Campistas</div>
+                <div className="text-[10px] mt-0.5 text-sky-400/70">con check-in</div>
+              </div>
+              <div className="rounded-xl p-4 border text-center" style={{ background: 'var(--color-bg)', borderColor: 'var(--color-border)' }}>
+                <div className="text-3xl font-bold text-violet-400" style={{ fontFamily: 'var(--font-display)' }}>
+                  {servidoresCheckin}
+                  <span className="text-base font-normal text-slate-500 ml-1">/ {servidores.length}</span>
+                </div>
+                <div className="text-xs mt-1 font-medium" style={{ color: 'var(--color-text-muted)' }}>Servidores</div>
+                <div className="text-[10px] mt-0.5 text-violet-400/70">con check-in</div>
+              </div>
+            </div>
           </div>
         );
       })()}
@@ -702,8 +740,8 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
         </div>
       </div>
 
-      {/* Equipo ranking (campamento style) or Nación ranking */}
-      {hasEquipos ? (
+      {/* Equipo ranking (campamento style, incluye Áreas de Servicio) o Nación ranking */}
+      {(hasEquipos || hasAreasServicio) ? (
         <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
           <div className="flex items-center justify-between mb-5">
             <h3 className="font-bold" style={{ fontFamily: 'var(--font-display)' }}>Ranking por Equipo</h3>
@@ -784,11 +822,11 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
                             doc.text(eq.nombre, 25, currentY + 7.5);
 
                             // Leader text on the right
-                            if (eq.lider || eq.consejero) {
+                            if (eq.lider || eq.consejero || eq.responsable) {
                               doc.setFontSize(8);
                               doc.setFont('helvetica', 'normal');
                               doc.setTextColor(160, 160, 160);
-                              const liderText = [eq.lider && `Líder: ${eq.lider}`, eq.consejero && `Consejero: ${eq.consejero}`].filter(Boolean).join('  ·  ');
+                              const liderText = [eq.lider && `Líder: ${eq.lider}`, eq.consejero && `Consejero: ${eq.consejero}`, eq.responsable && `Responsable: ${eq.responsable}`].filter(Boolean).join('  ·  ');
                               doc.text(liderText, pageW - 14, currentY + 7.5, { align: 'right' });
                             }
 
@@ -897,10 +935,15 @@ export default function Dashboard({ registros: allRegistros, asientos, naciones,
                         <div className="flex items-center gap-2">
                           <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color || 'var(--color-accent)' }} />
                           <span className="text-sm font-semibold truncate">{eq.nombre}</span>
+                          {eq.grupo === 'area' && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0" style={{ background: 'var(--color-bg)', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)' }}>
+                              Servicio
+                            </span>
+                          )}
                         </div>
-                        {(eq.lider || eq.consejero) && (
+                        {(eq.lider || eq.consejero || eq.responsable) && (
                           <div className="text-[10px] mt-0.5 ml-5 truncate" style={{ color: 'var(--color-text-muted)' }}>
-                            {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}
+                            {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}{eq.responsable && `Responsable: ${eq.responsable}`}
                           </div>
                         )}
                       </div>

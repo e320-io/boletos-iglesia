@@ -42,6 +42,9 @@ export const SEAT_LAYOUT = {
   bottom: { rows: ['U', 'V', 'W', 'X', 'Y', 'Z'], cols: Array.from({ length: 10 }, (_, i) => i + 11) },
 };
 
+// Roles de instrumento — Encuentro de Adoradores
+export const ROLES_INSTRUMENTO = ['Guitarrista', 'Voz', 'Baterista', 'Bajo', 'Piano'] as const;
+
 // Conferencistas zone: RE-1 to RE-40, 2 rows × 20 seats (10 left + 10 right), admin-only
 export const CONF_SEATS_TOTAL = 40;
 export const CONF_SEAT_ROWS: { left: number[]; right: number[] }[] = [

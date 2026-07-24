@@ -14,13 +14,15 @@ export interface Registro {
   edad: number | null;
   nacion_id: string | null;
   equipo_id: string | null;
-  status: 'pendiente' | 'abono' | 'liquidado';
+  area_servicio_id: string | null;
+  status: 'pendiente' | 'abono' | 'liquidado' | 'reembolsado';
   monto_total: number;
   monto_pagado: number;
   precio_boleto: number;
   notas: string | null;
   evento_id: string | null;
   tipo: string | null;
+  rol: string | null;
   checked_in: boolean;
   checked_in_at: string | null;
   checked_in_2: boolean;
@@ -30,6 +32,7 @@ export interface Registro {
   // Joined
   nacion?: Nacion;
   equipo?: EquipoEvento;
+  area_servicio?: AreaServicioEvento;
   asientos?: Asiento[];
   pagos?: Pago[];
 }
@@ -39,6 +42,17 @@ export interface EquipoEvento {
   evento_id: string;
   nombre: string;
   color: string;
+  genero?: string | null;
+  lider?: string | null;
+  consejero?: string | null;
+}
+
+export interface AreaServicioEvento {
+  id: string;
+  evento_id: string;
+  nombre: string;
+  color: string;
+  responsable?: string | null;
 }
 
 export interface Asiento {
@@ -59,6 +73,10 @@ export interface Pago {
   referencia: string | null;
   notas: string | null;
   created_at: string;
+  reembolsado: boolean;
+  monto_reembolsado: number;
+  reembolsado_at: string | null;
+  motivo_reembolso: string | null;
 }
 
 export type MetodoPago = Pago['metodo_pago'];

@@ -14,6 +14,8 @@ interface Evento {
   es_gratuito: boolean;
   usa_fases_precio: boolean;
   usa_equipos: boolean;
+  usa_areas_servicio: boolean;
+  usa_rol_instrumento: boolean;
   ministerio: string | null;
   activo: boolean;
   compra_online: boolean;
@@ -34,6 +36,13 @@ interface Equipo {
   color: string;
 }
 
+interface AreaServicio {
+  id?: string;
+  nombre: string;
+  color: string;
+  responsable: string;
+}
+
 export default function EventManager({ onBack }: { onBack: () => void }) {
   const [eventos, setEventos] = useState<Evento[]>([]);
   const [editing, setEditing] = useState<Evento | null>(null);
@@ -51,11 +60,14 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const [tieneAsientos, setTieneAsientos] = useState(false);
   const [usaFasesPrecio, setUsaFasesPrecio] = useState(false);
   const [usaEquipos, setUsaEquipos] = useState(false);
+  const [usaAreasServicio, setUsaAreasServicio] = useState(false);
+  const [usaRolInstrumento, setUsaRolInstrumento] = useState(false);
   const [compraOnline, setCompraOnline] = useState(false);
   const [imagenUrl, setImagenUrl] = useState('');
   const [uploadingImg, setUploadingImg] = useState(false);
   const [fases, setFases] = useState<FasePrecio[]>([]);
   const [equipos, setEquipos] = useState<Equipo[]>([]);
+  const [areasServicio, setAreasServicio] = useState<AreaServicio[]>([]);
   const [formError, setFormError] = useState('');
   const [formSuccess, setFormSuccess] = useState('');
   const [addingConfSeats, setAddingConfSeats] = useState<string | null>(null);
@@ -75,8 +87,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
   const resetForm = () => {
     setNombre(''); setSlug(''); setFecha(''); setDescripcion(''); setMinisterio('');
     setEsGratuito(false); setPrecioDefault(550); setTieneAsientos(false);
-    setUsaFasesPrecio(false); setUsaEquipos(false); setCompraOnline(false); setImagenUrl('');
-    setFases([]); setEquipos([]);
+    setUsaFasesPrecio(false); setUsaEquipos(false); setUsaAreasServicio(false); setUsaRolInstrumento(false); setCompraOnline(false); setImagenUrl('');
+    setFases([]); setEquipos([]); setAreasServicio([]);
     setFormError(''); setFormSuccess('');
   };
 
@@ -93,6 +105,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     setTieneAsientos(evento.tiene_asientos);
     setUsaFasesPrecio(evento.usa_fases_precio);
     setUsaEquipos(evento.usa_equipos);
+    setUsaAreasServicio(evento.usa_areas_servicio ?? false);
+    setUsaRolInstrumento(evento.usa_rol_instrumento ?? false);
     setCompraOnline(evento.compra_online ?? false);
     setImagenUrl(evento.imagen_url ?? '');
 
@@ -103,6 +117,10 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     // Load equipos
     const { data: equiposData } = await supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre');
     if (equiposData) setEquipos(equiposData);
+
+    // Load áreas de servicio
+    const { data: areasData } = await supabase.from('areas_servicio_evento').select('*').eq('evento_id', evento.id).order('nombre');
+    if (areasData) setAreasServicio(areasData.map((a: any) => ({ ...a, responsable: a.responsable || '' })));
   };
 
   const handleImageUpload = async (file: File) => {
@@ -141,6 +159,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
         tiene_asientos: tieneAsientos,
         usa_fases_precio: usaFasesPrecio,
         usa_equipos: usaEquipos,
+        usa_areas_servicio: usaAreasServicio,
+        usa_rol_instrumento: usaRolInstrumento,
         compra_online: compraOnline,
         imagen_url: imagenUrl.trim() || null,
       };
@@ -209,6 +229,22 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
             await supabase.from('equipos_evento').update({ nombre: eq.nombre, color: eq.color }).eq('id', eq.id);
           } else {
             await supabase.from('equipos_evento').insert({ evento_id: eventoId, nombre: eq.nombre, color: eq.color });
+          }
+        }
+      }
+
+      // Save áreas de servicio
+      if (usaAreasServicio) {
+        const existingAreaIds = areasServicio.filter(a => a.id).map(a => a.id!);
+        if (editing) {
+          await supabase.from('areas_servicio_evento').delete().eq('evento_id', eventoId).not('id', 'in', `(${existingAreaIds.join(',')})`);
+        }
+        for (const area of areasServicio) {
+          const areaData = { nombre: area.nombre, color: area.color, responsable: area.responsable.trim() || null };
+          if (area.id) {
+            await supabase.from('areas_servicio_evento').update(areaData).eq('id', area.id);
+          } else {
+            await supabase.from('areas_servicio_evento').insert({ evento_id: eventoId, ...areaData });
           }
         }
       }
@@ -351,6 +387,12 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
     const updated = [...equipos]; (updated[i] as any)[field] = value; setEquipos(updated);
   };
 
+  const addArea = () => setAreasServicio([...areasServicio, { nombre: '', color: '#808080', responsable: '' }]);
+  const removeArea = (i: number) => setAreasServicio(areasServicio.filter((_, idx) => idx !== i));
+  const updateArea = (i: number, field: keyof AreaServicio, value: string) => {
+    const updated = [...areasServicio]; (updated[i] as any)[field] = value; setAreasServicio(updated);
+  };
+
   const colors = ['#4CAF50', '#2196F3', '#FF9800', '#9C27B0', '#E91E63', '#00BCD4', '#FF5722', '#795548'];
 
   // Show form
@@ -451,6 +493,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                 { label: '🪑 Asientos enumerados', desc: 'Mapa de asientos con selección', value: tieneAsientos, onChange: (v: boolean) => { setTieneAsientos(v); if (v) setEsGratuito(false); } },
                 { label: '📅 Fases de precio', desc: 'Precio varía por mes/fecha', value: usaFasesPrecio, onChange: (v: boolean) => { setUsaFasesPrecio(v); if (v) setEsGratuito(false); } },
                 { label: '👥 Equipos', desc: 'Usa equipos en vez de naciones', value: usaEquipos, onChange: setUsaEquipos },
+                { label: '🧑‍🔧 Áreas de servicio', desc: 'Permite registrar servidores por área (cocina, logística, etc.)', value: usaAreasServicio, onChange: setUsaAreasServicio },
+                { label: '🎵 Rol de instrumento', desc: 'Permite elegir rol musical al registrar (Guitarrista, Voz, etc.)', value: usaRolInstrumento, onChange: setUsaRolInstrumento },
                 { label: '🛒 Venta en línea', desc: 'Aparece en la página de compra pública', value: compraOnline, onChange: setCompraOnline },
               ].map(toggle => (
                 <button key={toggle.label} onClick={() => toggle.onChange(!toggle.value)}
@@ -543,6 +587,31 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
             </div>
           )}
 
+          {/* Áreas de servicio */}
+          {usaAreasServicio && (
+            <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold" style={{ fontFamily: 'var(--font-display)' }}>Áreas de Servicio</h3>
+                <button onClick={addArea} className="px-3 py-1.5 rounded-lg text-xs font-bold text-white"
+                  style={{ background: 'var(--color-accent)' }}>+ Agregar Área</button>
+              </div>
+              <div className="space-y-2">
+                {areasServicio.map((area, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input type="color" value={area.color} onChange={e => updateArea(i, 'color', e.target.value)}
+                      className="w-8 h-8 rounded cursor-pointer border-0" />
+                    <input type="text" value={area.nombre} onChange={e => updateArea(i, 'nombre', e.target.value)} placeholder="Ej: Cocina"
+                      className="flex-1 px-3 py-2 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    <input type="text" value={area.responsable} onChange={e => updateArea(i, 'responsable', e.target.value)} placeholder="Responsable (opcional)"
+                      className="flex-1 px-3 py-2 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                    <button onClick={() => removeArea(i)} className="px-2 py-2 rounded text-xs hover:text-red-400" style={{ color: 'var(--color-text-muted)' }}>✕</button>
+                  </div>
+                ))}
+                {areasServicio.length === 0 && <p className="text-xs text-center py-2" style={{ color: 'var(--color-text-muted)' }}>Sin áreas — agrega una</p>}
+              </div>
+            </div>
+          )}
+
           {/* Errors / Success */}
           {formError && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(239,68,68,0.1)', color: '#ef4444' }}>{formError}</div>}
           {formSuccess && <div className="rounded-lg p-3 text-sm text-center" style={{ background: 'rgba(16,185,129,0.1)', color: '#10b981' }}>{formSuccess}</div>}
@@ -590,6 +659,8 @@ export default function EventManager({ onBack }: { onBack: () => void }) {
                   {e.tiene_asientos && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-400">Asientos</span>}
                   {e.usa_fases_precio && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/20 text-amber-400">Fases</span>}
                   {e.usa_equipos && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/20 text-purple-400">Equipos</span>}
+                  {e.usa_areas_servicio && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-fuchsia-500/20 text-fuchsia-400">Áreas</span>}
+                  {e.usa_rol_instrumento && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-cyan-500/20 text-cyan-400">Roles</span>}
                   {e.compra_online && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-500/20 text-green-400">🛒 Online</span>}
                   {!e.activo && <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500/20 text-red-400">Inactivo</span>}
                 </div>

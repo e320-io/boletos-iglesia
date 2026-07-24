@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
       if (session.payment_status !== 'paid') return NextResponse.json({ ok: true });
 
       const meta = session.metadata || {};
-      const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId } = meta;
+      const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId, rol } = meta;
       const numBoletos = parseInt(meta.cantidad || '1');
       const asientoIds: string[] = JSON.parse(meta.asientoIds || '[]');
       const total = (session.amount_total || 0) / 100;
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
           monto_pagado: pagoBoleto,
           precio_boleto: pagoBoleto,
           tipo: 'general',
+          rol: i === 0 ? (rol || null) : null,
           notas: numBoletos > 1 ? `Compra en línea - ${nombre} (${numBoletos} boletos)` : 'Compra en línea',
         }).select().single();
 

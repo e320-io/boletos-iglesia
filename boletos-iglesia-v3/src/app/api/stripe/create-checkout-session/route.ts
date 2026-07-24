@@ -6,7 +6,7 @@ export async function POST(request: NextRequest) {
   try {
     const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
     const body = await request.json();
-    const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId, asientoIds, cantidad } = body;
+    const { eventoId, nombre, telefono, correo, whatsapp, edad, nacionId, equipoId, rol, asientoIds, cantidad } = body;
 
     const supabase = createServerClient();
     const { data: evento, error: evError } = await supabase.from('eventos').select('*').eq('id', eventoId).single();
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
         edad: edad ? String(edad) : '',
         nacionId: nacionId || '',
         equipoId: equipoId || '',
+        rol: rol || '',
         asientoIds: JSON.stringify(asientoIds || []),
         cantidad: String(numBoletos),
       },

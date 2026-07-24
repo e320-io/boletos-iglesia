@@ -12,6 +12,7 @@ interface Props {
   registros: Registro[];
   naciones: Nacion[];
   equipos?: any[];
+  areasServicio?: any[];
   onSelect: (r: Registro) => void;
   onRefresh: () => void;
   privacyMode?: boolean;
@@ -25,7 +26,7 @@ interface Props {
   tieneAsientos?: boolean;
 }
 
-export default function RegistrosList({ registros, naciones, equipos = [], onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false, readOnly = false, tieneAsientos = false }: Props) {
+export default function RegistrosList({ registros, naciones, equipos = [], areasServicio = [], onSelect, onRefresh, privacyMode = false, showCheckIn = false, showCheckIn2 = false, eventoId, addToast, userRole = 'admin', isFreeEvent = false, readOnly = false, tieneAsientos = false }: Props) {
   const { user } = useAuth();
   const [search, setSearch] = useState('');
   const canSeeMoney = userRole !== 'registro' && !isFreeEvent;
@@ -46,6 +47,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
     telefono: false,
     correo: false,
     tipo: true,
+    rol: true,
     grupo: true,
     asiento: true,
     status: true,
@@ -58,6 +60,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   // Conferencistas have their own tab; exclude them from the main list
   const regularRegistros = registros.filter(r => (r as any).tipo !== 'conferencista');
   const hasTipos = regularRegistros.some(r => (r as any).tipo && (r as any).tipo !== 'general');
+  const hasRoles = regularRegistros.some(r => (r as any).rol);
   const encuentristas = regularRegistros.filter(r => (r as any).tipo === 'Encuentrista').length;
   const servidores = regularRegistros.filter(r => (r as any).tipo === 'Servidor').length;
 
@@ -171,8 +174,9 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
     pendiente: 'bg-red-500/20 text-red-400 border-red-500/30',
     abono: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
     liquidado: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+    reembolsado: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
   };
-  const statusLabels: Record<string, string> = { pendiente: 'Pendiente', abono: 'Abono', liquidado: 'Liquidado' };
+  const statusLabels: Record<string, string> = { pendiente: 'Pendiente', abono: 'Abono', liquidado: 'Liquidado', reembolsado: 'Reembolsado' };
 
   const totalRecaudado = filtered.reduce((s, r) => s + Number(r.monto_pagado), 0);
   const totalPorCobrar = filtered.reduce((s, r) => s + (Number(r.monto_total) - Number(r.monto_pagado)), 0);
@@ -184,15 +188,24 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
   const todayMX = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' }); // YYYY-MM-DD
   const allPagos = registros.flatMap(r => (r.pagos || []).map((p: any) => ({ ...p, registroNombre: r.nombre })));
   const pagosHoy = allPagos.filter((p: any) => {
-    if (!p.created_at) return false;
+    if (p.reembolsado || !p.created_at) return false;
     const pagoDateMX = new Date(p.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
     return pagoDateMX === todayMX;
   });
-  const corteEfectivo = pagosHoy.filter((p: any) => p.metodo_pago === 'efectivo').reduce((s: number, p: any) => s + Number(p.monto), 0);
-  const corteTarjeta = pagosHoy.filter((p: any) => p.metodo_pago === 'tarjeta').reduce((s: number, p: any) => s + Number(p.monto), 0);
-  const corteTransferencia = pagosHoy.filter((p: any) => p.metodo_pago === 'transferencia').reduce((s: number, p: any) => s + Number(p.monto), 0);
-  const corteOtro = pagosHoy.filter((p: any) => p.metodo_pago === 'otro').reduce((s: number, p: any) => s + Number(p.monto), 0);
-  const corteStripe = pagosHoy.filter((p: any) => p.metodo_pago === 'stripe').reduce((s: number, p: any) => s + Number(p.monto), 0);
+  // Reembolsos procesados hoy: el dinero sale de caja hoy aunque el pago original sea de otro día
+  const reembolsosHoy = allPagos.filter((p: any) => {
+    if (!p.reembolsado || !p.reembolsado_at) return false;
+    const reembolsoDateMX = new Date(p.reembolsado_at).toLocaleDateString('en-CA', { timeZone: 'America/Mexico_City' });
+    return reembolsoDateMX === todayMX;
+  });
+  const netoPorMetodo = (metodo: string) =>
+    pagosHoy.filter((p: any) => p.metodo_pago === metodo).reduce((s: number, p: any) => s + Number(p.monto), 0) -
+    reembolsosHoy.filter((p: any) => p.metodo_pago === metodo).reduce((s: number, p: any) => s + Number(p.monto_reembolsado), 0);
+  const corteEfectivo = netoPorMetodo('efectivo');
+  const corteTarjeta = netoPorMetodo('tarjeta');
+  const corteTransferencia = netoPorMetodo('transferencia');
+  const corteOtro = netoPorMetodo('otro');
+  const corteStripe = netoPorMetodo('stripe');
   const corteTotal = corteEfectivo + corteTarjeta + corteTransferencia + corteOtro + corteStripe;
 
   return (
@@ -211,6 +224,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             <option value="pendiente">Pendiente</option>
             <option value="abono">Abono</option>
             <option value="liquidado">Liquidado</option>
+            <option value="reembolsado">Reembolsado</option>
           </select>
         )}
         {!isFreeEvent && canSeeMoney && (
@@ -280,6 +294,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                 { key: 'telefono', label: 'Teléfono' },
                 { key: 'correo', label: 'Correo' },
                 ...(hasTipos ? [{ key: 'tipo', label: 'Tipo' }] : []),
+                ...(hasRoles ? [{ key: 'rol', label: 'Rol' }] : []),
                 { key: 'grupo', label: hasEquipos ? 'Equipo' : 'Nación' },
                 ...(tieneAsientos ? [{ key: 'asiento', label: 'Asiento' }] : []),
                 ...(!isFreeEvent ? [{ key: 'status', label: 'Status' }] : []),
@@ -348,6 +363,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
             if (visibleColumns.telefono) headRow.push('Teléfono');
             if (visibleColumns.correo) headRow.push('Correo');
             if (hasTipos && visibleColumns.tipo) headRow.push('Tipo');
+            if (hasRoles && visibleColumns.rol) headRow.push('Rol');
             if (visibleColumns.grupo) headRow.push(hasEquipos ? 'Equipo' : 'Nación');
             if (tieneAsientos && visibleColumns.asiento) headRow.push('Asiento');
             if (!isFreeEvent && visibleColumns.status) headRow.push('Status');
@@ -359,7 +375,10 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               if (visibleColumns.telefono) row.push(r.telefono || '—');
               if (visibleColumns.correo) row.push(r.correo || '—');
               if (hasTipos && visibleColumns.tipo) row.push((r as any).tipo || 'general');
-              if (visibleColumns.grupo) row.push(hasEquipos ? ((r as any).equipo?.nombre || '—') : ((r as any).nacion?.nombre || '—'));
+              if (hasRoles && visibleColumns.rol) row.push((r as any).rol || '—');
+              if (visibleColumns.grupo) row.push(hasEquipos
+                ? ((r as any).tipo === 'Servidor' ? ((r as any).area_servicio?.nombre || '—') : ((r as any).equipo?.nombre || '—'))
+                : ((r as any).nacion?.nombre || '—'));
               if (tieneAsientos && visibleColumns.asiento) row.push(r.asientos && r.asientos.length > 0 ? r.asientos.map(a => seatLabel(a)).join(', ') : '—');
               if (!isFreeEvent && visibleColumns.status) row.push(r.status.charAt(0).toUpperCase() + r.status.slice(1));
               if (canSeeMoney && visibleColumns.pagado) row.push(`$${Number(r.monto_pagado).toLocaleString()}`);
@@ -566,6 +585,7 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
               {visibleColumns.telefono && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Teléfono</th>}
               {visibleColumns.correo && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Correo</th>}
               {hasTipos && visibleColumns.tipo && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Tipo</th>}
+              {hasRoles && visibleColumns.rol && <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Rol</th>}
               {visibleColumns.grupo && (hasEquipos
                 ? <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Equipo</th>
                 : <th className="text-left px-4 py-3 font-medium" style={{ color: 'var(--color-text-muted)' }}>Nación</th>
@@ -617,13 +637,25 @@ export default function RegistrosList({ registros, naciones, equipos = [], onSel
                       </span>
                     </td>
                   )}
+                  {hasRoles && visibleColumns.rol && (
+                    <td className="px-4 py-3 text-xs" style={{ color: 'var(--color-text-muted)' }}>{(r as any).rol || '—'}</td>
+                  )}
                   {visibleColumns.grupo && (hasEquipos ? (
+                    (r as any).tipo === 'Servidor' ? (
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).area_servicio?.color || '#666' }} />
+                          <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).area_servicio?.nombre || '—'}</span>
+                        </div>
+                      </td>
+                    ) : (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: (r as any).equipo?.color || '#666' }} />
                         <span className="text-xs truncate max-w-[140px]" style={{ color: 'var(--color-text-muted)' }}>{(r as any).equipo?.nombre || '—'}</span>
                       </div>
                     </td>
+                    )
                   ) : (
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">

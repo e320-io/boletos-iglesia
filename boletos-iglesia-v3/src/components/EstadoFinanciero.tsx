@@ -69,8 +69,19 @@ export default function EstadoFinanciero({ registros, eventoId, eventoNombre }: 
     fetchGastos();
   }, [fetchGastos]);
 
-  // Compute ingresos from registros pagos
-  const allPagos = registros.flatMap(r => r.pagos ?? []);
+  // Compute ingresos from registros pagos (excluye pagos reembolsados: ese dinero ya no está recaudado)
+  const allPagosConReembolsos = registros.flatMap(r => r.pagos ?? []);
+  const allPagos = allPagosConReembolsos.filter(p => !p.reembolsado);
+  const pagosReembolsados = allPagosConReembolsos.filter(p => p.reembolsado);
+
+  const totalReembolsado = pagosReembolsados.reduce((s, p) => s + Number(p.monto_reembolsado), 0);
+  const reembolsoPorMetodo = {
+    efectivo: pagosReembolsados.filter(p => p.metodo_pago === 'efectivo').reduce((s, p) => s + Number(p.monto_reembolsado), 0),
+    transferencia: pagosReembolsados.filter(p => p.metodo_pago === 'transferencia').reduce((s, p) => s + Number(p.monto_reembolsado), 0),
+    tarjeta: pagosReembolsados.filter(p => p.metodo_pago === 'tarjeta').reduce((s, p) => s + Number(p.monto_reembolsado), 0),
+    stripe: pagosReembolsados.filter(p => (p.metodo_pago as string) === 'stripe').reduce((s, p) => s + Number(p.monto_reembolsado), 0),
+    otro: pagosReembolsados.filter(p => p.metodo_pago === 'otro').reduce((s, p) => s + Number(p.monto_reembolsado), 0),
+  };
 
   const totalEfectivo = allPagos.filter(p => p.metodo_pago === 'efectivo').reduce((s, p) => s + Number(p.monto), 0);
   const totalTransferencia = allPagos.filter(p => p.metodo_pago === 'transferencia').reduce((s, p) => s + Number(p.monto), 0);
@@ -276,6 +287,28 @@ export default function EstadoFinanciero({ registros, eventoId, eventoNombre }: 
       });
       currentY = (doc as any).lastAutoTable.finalY + 8;
 
+      // ── Reembolsos (ya restados arriba, solo informativo) ──
+      if (totalReembolsado > 0) {
+        sectionTitle('Reembolsos');
+        const reembolsoRows: string[][] = [];
+        if (reembolsoPorMetodo.efectivo > 0) reembolsoRows.push(['Efectivo', peso(reembolsoPorMetodo.efectivo)]);
+        if (reembolsoPorMetodo.tarjeta > 0) reembolsoRows.push(['Tarjeta', peso(reembolsoPorMetodo.tarjeta)]);
+        if (reembolsoPorMetodo.stripe > 0) reembolsoRows.push(['Stripe', peso(reembolsoPorMetodo.stripe)]);
+        if (reembolsoPorMetodo.transferencia > 0) reembolsoRows.push(['Transferencia', peso(reembolsoPorMetodo.transferencia)]);
+        if (reembolsoPorMetodo.otro > 0) reembolsoRows.push(['Otro', peso(reembolsoPorMetodo.otro)]);
+        reembolsoRows.push(['Total reembolsado', peso(totalReembolsado)]);
+        (doc as any).autoTable({
+          ...tableOpts(currentY),
+          head: [['Método', 'Monto']],
+          body: reembolsoRows,
+          columnStyles: { 0: { cellWidth: 90 }, 1: { halign: 'right' } },
+          didParseCell: (data: any) => {
+            if (data.section === 'body' && data.row.index === reembolsoRows.length - 1) data.cell.styles.fontStyle = 'bold';
+          },
+        });
+        currentY = (doc as any).lastAutoTable.finalY + 8;
+      }
+
       // ── Ingresos adicionales ──
       sectionTitle('Ingresos adicionales');
       if (ingresos.length === 0) {
@@ -455,6 +488,28 @@ export default function EstadoFinanciero({ registros, eventoId, eventoNombre }: 
           </div>
         </div>
       </div>
+
+      {/* Reembolsos */}
+      {totalReembolsado > 0 && (
+        <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>
+          <h3 className="font-bold mb-1" style={{ fontFamily: 'var(--font-display)' }}>Reembolsos</h3>
+          <p className="text-xs mb-4" style={{ color: 'var(--color-text-muted)' }}>Ya restados de &quot;Ingresos por boletos&quot; arriba — se muestran aquí solo como referencia.</p>
+          <div className="space-y-1.5">
+            {Object.entries(reembolsoPorMetodo).filter(([, v]) => v > 0).map(([key, val]) => (
+              <div key={key} className="flex items-center justify-between text-sm">
+                <span className={`text-xs px-2 py-0.5 rounded-full border ${metodoBadge[key]}`}>
+                  {METODOS.find(m => m.value === key)?.label || (key === 'stripe' ? 'Stripe' : key)}
+                </span>
+                <span className="font-mono text-slate-400">− ${fmt(val)}</span>
+              </div>
+            ))}
+            <div className="flex items-center justify-between pt-2 font-bold">
+              <span className="text-sm">Total reembolsado</span>
+              <span className="font-mono text-slate-400">− ${fmt(totalReembolsado)}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Ingresos adicionales */}
       <div className="rounded-xl p-6 border" style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}>

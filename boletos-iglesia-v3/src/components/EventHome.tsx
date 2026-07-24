@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { METODOS_PAGO, CONF_SEAT_ROWS } from '@/lib/constants';
+import { METODOS_PAGO, CONF_SEAT_ROWS, ROLES_INSTRUMENTO } from '@/lib/constants';
 import { seatLabel } from '@/lib/seatLabel';
 import { applyTheme, getTheme, resetTheme } from '@/lib/themes';
 import { logActivity } from '@/lib/activity';
@@ -33,6 +33,7 @@ interface Evento {
   precio_default: number;
   tiene_asientos: boolean;
   usa_fases_precio?: boolean;
+  usa_rol_instrumento?: boolean;
 }
 
 interface FasePrecio {
@@ -85,7 +86,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   const [whatsapp, setWhatsapp] = useState('');
   const [nacionId, setNacionId] = useState('');
   const [equipoId, setEquipoId] = useState('');
-  const [tipo, setTipo] = useState('Encuentrista');
+  const [areaServicioId, setAreaServicioId] = useState('');
+  const [tipo, setTipo] = useState(evento.slug?.toLowerCase().includes('encuentro') ? 'Encuentrista' : 'general');
+  const [rol, setRol] = useState('');
+  const [rolOtro, setRolOtro] = useState('');
   const [numBoletos, setNumBoletos] = useState(1);
   const [guestNames, setGuestNames] = useState<string[]>([]);
   const [selectedSeats, setSelectedSeats] = useState<string[]>([]);
@@ -101,6 +105,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
 
   // Equipos for events like HollyFest
   const [equipos, setEquipos] = useState<any[]>([]);
+  const [areasServicio, setAreasServicio] = useState<any[]>([]);
   const [fases, setFases] = useState<FasePrecio[]>([]);
 
   // Conferencistas tab state (shared with cortesía mode)
@@ -118,9 +123,10 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   }, []);
 
   const fetchData = useCallback(async () => {
-    const [nacionesRes, equiposRes, asientosRes, registrosRes, fasesRes] = await Promise.all([
+    const [nacionesRes, equiposRes, areasServicioRes, asientosRes, registrosRes, fasesRes] = await Promise.all([
       supabase.from('naciones').select('*').order('nombre'),
       supabase.from('equipos_evento').select('*').eq('evento_id', evento.id).order('nombre'),
+      supabase.from('areas_servicio_evento').select('*').eq('evento_id', evento.id).order('nombre'),
       evento.tiene_asientos
         ? supabase.from('asientos').select('*').eq('evento_id', evento.id)
         : Promise.resolve({ data: [] }),
@@ -128,6 +134,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         *,
         nacion:naciones(*),
         equipo:equipos_evento(*),
+        area_servicio:areas_servicio_evento(*),
         asientos(*),
         pagos(*)
       `).eq('evento_id', evento.id).order('created_at', { ascending: false }),
@@ -138,6 +145,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
 
     if (nacionesRes.data) setNaciones(nacionesRes.data);
     if (equiposRes.data) setEquipos(equiposRes.data);
+    if (areasServicioRes.data) setAreasServicio(areasServicioRes.data);
     if (asientosRes.data) setAsientos(asientosRes.data as Asiento[]);
     if (registrosRes.data) setRegistros(registrosRes.data);
     if (fasesRes.data) {
@@ -158,9 +166,13 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
     return () => { supabase.removeChannel(channel); };
   }, [fetchData, evento.id]);
 
+  const isEncuentroEvent = evento.slug?.toLowerCase().includes('encuentro');
+  const usaRolInstrumento = evento.usa_rol_instrumento === true;
+
   const resetForm = () => {
-    setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId('');
-    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setSplitPayment(false); setSplitMontos([{ metodo: 'efectivo', monto: '' }, { metodo: 'tarjeta', monto: '' }]); setTipo('Encuentrista');
+    setNombre(''); setEdad(''); setTelefono(''); setCorreo(''); setWhatsapp(''); setNacionId(''); setEquipoId(''); setAreaServicioId('');
+    setNumBoletos(1); setGuestNames([]); setSelectedSeats([]); setMontoPago(''); setMetodoPago('efectivo'); setMetodosPorBoleto([]); setSplitPayment(false); setSplitMontos([{ metodo: 'efectivo', monto: '' }, { metodo: 'tarjeta', monto: '' }]); setTipo(isEncuentroEvent ? 'Encuentrista' : 'general');
+    setRol(''); setRolOtro('');
     setCortesiaMode(false); setConfNombre(''); setConfTelefono(''); setConfCorreo(''); setConfSelectedSeat(null);
   };
 
@@ -170,6 +182,8 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   const montoAbono = splitPayment ? splitTotal : (parseFloat(montoPago) || 0);
   const willBeLiquidado = isFreeEvent || montoAbono >= montoTotal;
   const hasEquipos = equipos.length > 0;
+  const hasAreasServicio = areasServicio.length > 0;
+  const esServidor = tipo === 'Servidor';
 
   const handleSeatClick = (seatId: string) => {
     setSelectedSeats(prev => {
@@ -182,8 +196,12 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
   const handleSubmit = async () => {
     if (!nombre.trim()) { addToast('error', 'El nombre es requerido'); return; }
     if (!hasEquipos && !nacionId) { addToast('error', 'Selecciona una nación'); return; }
-    if (hasEquipos && !equipoId) { addToast('error', 'Selecciona un equipo'); return; }
+    if (hasEquipos && !esServidor && !equipoId) { addToast('error', 'Selecciona un equipo'); return; }
+    if (hasAreasServicio && esServidor && !areaServicioId) { addToast('error', 'Selecciona un área de servicio'); return; }
+    if (usaRolInstrumento && rol === 'Otro' && !rolOtro.trim()) { addToast('error', 'Especifica el rol'); return; }
     if (!isFreeEvent && montoAbono > montoTotal) { addToast('error', 'El abono no puede ser mayor al total'); return; }
+
+    const rolFinal = usaRolInstrumento ? ((rol === 'Otro' ? rolOtro.trim() : rol) || null) : null;
 
     if (willBeLiquidado && evento.tiene_asientos) {
       if (selectedSeats.length !== numBoletos) {
@@ -201,8 +219,9 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
           .insert({
             nombre: nombre.trim(), telefono: telefono.trim() || null, correo: correo.trim() || null,
             whatsapp: whatsapp.trim() || null, edad: edad ? parseInt(edad) : null,
-            nacion_id: hasEquipos ? null : nacionId, equipo_id: hasEquipos ? equipoId : null,
-            evento_id: evento.id, tipo: 'general', status: 'liquidado',
+            nacion_id: hasEquipos ? null : nacionId, equipo_id: (hasEquipos && !esServidor) ? equipoId : null,
+            area_servicio_id: (hasAreasServicio && esServidor) ? areaServicioId : null,
+            evento_id: evento.id, tipo: 'general', rol: rolFinal, status: 'liquidado',
             monto_total: 0, monto_pagado: 0, precio_boleto: 0,
           })
           .select().single();
@@ -252,8 +271,9 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
             whatsapp: i === 0 ? (whatsapp.trim() || null) : null,
             edad: i === 0 && edad ? parseInt(edad) : null,
             nacion_id: hasEquipos ? null : (nacionId || null),
-            equipo_id: hasEquipos ? (equipoId || null) : null,
-            evento_id: evento.id, tipo, status: statusBoleto,
+            equipo_id: (hasEquipos && !esServidor) ? (equipoId || null) : null,
+            area_servicio_id: (hasAreasServicio && esServidor) ? (areaServicioId || null) : null,
+            evento_id: evento.id, tipo, rol: i === 0 ? rolFinal : null, status: statusBoleto,
             monto_total: precioBoleto, monto_pagado: pagoBoleto, precio_boleto: precioBoleto,
             notas: numBoletos > 1 ? `Grupo de ${nombre.trim()} (${numBoletos} boletos)` : null,
           })
@@ -700,7 +720,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                         className="w-full px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
                     </div>
                   )}
-                  {evento.slug?.toLowerCase().includes('encuentro') && !isFreeEvent && (
+                  {isEncuentroEvent && !isFreeEvent && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
                       <div className="grid grid-cols-2 gap-2">
@@ -709,6 +729,39 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                             className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
                             style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
                             {t === 'Servidor' ? '⭐ Servidor ($150)' : `👤 ${t} ($${getPrecioFase(evento.precio_default, fases)})`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {usaRolInstrumento && !isFreeEvent && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Rol</label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {[...ROLES_INSTRUMENTO, 'Otro'].map(r => (
+                          <button key={r} type="button" onClick={() => setRol(r)}
+                            className={`px-3 py-2 rounded-lg text-sm border transition-all ${rol === r ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={rol === r ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                      {rol === 'Otro' && (
+                        <input type="text" value={rolOtro} onChange={e => setRolOtro(e.target.value)} placeholder="¿Cuál rol?"
+                          className="w-full mt-2 px-3 py-2.5 rounded-lg text-sm border bg-transparent" style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }} />
+                      )}
+                    </div>
+                  )}
+                  {/* Tipo Campista/Servidor — campamentos con área de servicio configurada */}
+                  {hasEquipos && hasAreasServicio && !isEncuentroEvent && !isFreeEvent && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Tipo</label>
+                      <div className="grid grid-cols-2 gap-2">
+                        {['general', 'Servidor'].map(t => (
+                          <button key={t} onClick={() => setTipo(t)}
+                            className={`px-3 py-2 rounded-lg text-sm border transition-all ${tipo === t ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={tipo === t ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            {t === 'Servidor' ? '⭐ Servidor' : '👤 Campista'}
                           </button>
                         ))}
                       </div>
@@ -769,54 +822,82 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                   )}
                   </>)}
                   {/* Equipo/Escuadrón selector */}
-                  {hasEquipos && (
+                  {hasEquipos && !esServidor && (
                     <div>
                       <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
                         {isFreeEvent ? 'Equipo *' : 'Escuadrón *'}
                       </label>
                       {(() => {
-                        const generos = Array.from(new Set(equipos.map(e => e.genero).filter(Boolean)));
+                        const GENERO_LABELS: Record<string, string> = { mujeres: '👩 Mujeres', hombres: '👨 Hombres' };
+                        const generos = Array.from(new Set(equipos.map(e => e.genero).filter(Boolean))) as string[];
+                        const sinGenero = equipos.filter(eq => !eq.genero);
                         const hasGeneros = generos.length > 0;
+                        const renderEquipoBtn = (eq: any) => (
+                          <button key={eq.id} onClick={() => setEquipoId(eq.id)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
+                              <span className="font-medium">{eq.nombre}</span>
+                            </div>
+                            {(eq.lider || eq.consejero) && (
+                              <div className="text-[10px] mt-0.5 ml-5" style={{ color: 'var(--color-text-muted)' }}>
+                                {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}
+                              </div>
+                            )}
+                          </button>
+                        );
                         return (
                           <div className="space-y-3">
-                            {hasGeneros ? generos.map(g => (
-                              <div key={g}>
-                                <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                                  {g === 'mujeres' ? '👩 Mujeres' : '👨 Hombres'}
-                                </div>
-                                <div className="space-y-1.5">
-                                  {equipos.filter(eq => eq.genero === g).map(eq => (
-                                    <button key={eq.id} onClick={() => setEquipoId(eq.id)}
-                                      className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                                      style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                                      <div className="flex items-center gap-2">
-                                        <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
-                                        <span className="font-medium">{eq.nombre}</span>
-                                      </div>
-                                      {(eq.lider || eq.consejero) && (
-                                        <div className="text-[10px] mt-0.5 ml-5" style={{ color: 'var(--color-text-muted)' }}>
-                                          {eq.lider && `Líder: ${eq.lider}`}{eq.lider && eq.consejero && ' · '}{eq.consejero && `Consejero: ${eq.consejero}`}
-                                        </div>
-                                      )}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            )) : (
-                              <div className="space-y-1.5">
-                                {equipos.map(eq => (
-                                  <button key={eq.id} onClick={() => setEquipoId(eq.id)}
-                                    className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all flex items-center gap-3 ${equipoId === eq.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
-                                    style={equipoId === eq.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
-                                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: eq.color }} />
-                                    {eq.nombre}
-                                  </button>
+                            {hasGeneros ? (
+                              <>
+                                {generos.map(g => (
+                                  <div key={g}>
+                                    <div className="text-xs font-bold uppercase tracking-wider mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+                                      {GENERO_LABELS[g] || g}
+                                    </div>
+                                    <div className="space-y-1.5">
+                                      {equipos.filter(eq => eq.genero === g).map(renderEquipoBtn)}
+                                    </div>
+                                  </div>
                                 ))}
+                                {sinGenero.length > 0 && (
+                                  <div className="space-y-1.5">
+                                    {sinGenero.map(renderEquipoBtn)}
+                                  </div>
+                                )}
+                              </>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {equipos.map(renderEquipoBtn)}
                               </div>
                             )}
                           </div>
                         );
                       })()}
+                    </div>
+                  )}
+                  {/* Área de servicio selector — solo para tipo Servidor */}
+                  {hasAreasServicio && esServidor && (
+                    <div>
+                      <label className="block text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>Área de Servicio *</label>
+                      <div className="space-y-1.5">
+                        {areasServicio.map(area => (
+                          <button key={area.id} onClick={() => setAreaServicioId(area.id)}
+                            className={`w-full text-left px-3 py-2.5 rounded-lg text-sm border transition-all ${areaServicioId === area.id ? 'border-cyan-500 text-white' : 'border-slate-700 text-slate-400'}`}
+                            style={areaServicioId === area.id ? { background: 'rgba(0,188,212,0.15)' } : {}}>
+                            <div className="flex items-center gap-2">
+                              <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: area.color }} />
+                              <span className="font-medium">{area.nombre}</span>
+                            </div>
+                            {area.responsable && (
+                              <div className="text-[10px] mt-0.5 ml-5" style={{ color: 'var(--color-text-muted)' }}>
+                                Responsable: {area.responsable}
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   )}
                   {/* Nación — for events that use naciones (paid without equipos, or paid with equipos that also need nación) */}
@@ -925,7 +1006,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
                   )}
 
                   <button onClick={handleSubmit}
-                    disabled={loading || !nombre.trim() || (!hasEquipos && !nacionId) || (hasEquipos && !equipoId)}
+                    disabled={loading || !nombre.trim() || (!hasEquipos && !nacionId) || (hasEquipos && !esServidor && !equipoId) || (hasAreasServicio && esServidor && !areaServicioId)}
                     className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
                     style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                     {loading ? 'Procesando...' : willBeLiquidado && evento.tiene_asientos ? 'Liquidar y Asignar Asiento' : 'Registrar'}
@@ -937,7 +1018,7 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
               {/* Submit button for free events (outside payment card) */}
               {!cortesiaMode && isFreeEvent && (
                 <button onClick={handleSubmit}
-                  disabled={loading || !nombre.trim() || (hasEquipos && !equipoId) || (!hasEquipos && !nacionId)}
+                  disabled={loading || !nombre.trim() || (hasEquipos && !esServidor && !equipoId) || (hasAreasServicio && esServidor && !areaServicioId) || (!hasEquipos && !nacionId)}
                   className="w-full py-3 rounded-lg font-bold text-white transition-all disabled:opacity-40 glow-pulse"
                   style={{ background: 'linear-gradient(135deg, var(--color-accent), #0097a7)', fontFamily: 'var(--font-display)' }}>
                   {loading ? 'Procesando...' : 'Registrar'}
@@ -948,20 +1029,21 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
         )}
 
         {tab === 'registros' && !selectedRegistro && (
-          <RegistrosList registros={regularRegistros} naciones={naciones} equipos={equipos}
+          <RegistrosList registros={regularRegistros} naciones={naciones} equipos={equipos} areasServicio={areasServicio}
             onSelect={userRole === 'dueno' ? () => {} : setSelectedRegistro}
             onRefresh={fetchData} privacyMode={privacyMode} showCheckIn={true} showCheckIn2={evento.slug?.toLowerCase().includes('encuentro')} eventoId={evento.id} addToast={addToast} userRole={userRole} isFreeEvent={isFreeEvent} readOnly={userRole === 'dueno'} tieneAsientos={evento.tiene_asientos} />
         )}
 
         {tab === 'registros' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
-            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={isEncuentroEvent}
+            usaRolInstrumento={usaRolInstrumento}
+            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos} areasServicio={areasServicio}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
 
         {tab === 'dashboard' && (
-          <Dashboard registros={regularRegistros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} isEncuentro={evento.slug?.toLowerCase().includes('encuentro')} />
+          <Dashboard registros={regularRegistros} asientos={asientos} naciones={naciones} eventoFecha={evento.fecha} eventoNombre={evento.nombre} isFreeEvent={isFreeEvent} equipos={equipos} areasServicio={areasServicio} isEncuentro={isEncuentroEvent} />
         )}
 
         {tab === 'financiero' && (
@@ -1097,8 +1179,9 @@ export default function EventHome({ evento, onBack, userRole = 'registro', avail
 
         {tab === 'conferencistas' && selectedRegistro && (
           <RegistroDetail registro={selectedRegistro} naciones={naciones} asientos={asientos}
-            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={evento.slug?.toLowerCase().includes('encuentro')}
-            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos}
+            tieneAsientos={evento.tiene_asientos} allRegistros={regularRegistros} esEncuentro={isEncuentroEvent}
+            usaRolInstrumento={usaRolInstrumento}
+            precioActual={!isFreeEvent ? precioBoleto : undefined} equipos={equipos} areasServicio={areasServicio}
             onBack={() => { setSelectedRegistro(null); fetchData(); }} onRefresh={fetchData} addToast={addToast} />
         )}
       </main>

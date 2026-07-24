@@ -6,6 +6,8 @@ export type ActionType =
   | 'registro_eliminado'
   | 'pago_registrado'
   | 'pago_grupo_liquidado'
+  | 'pago_reembolsado'
+  | 'registro_reembolsado'
   | 'asiento_asignado'
   | 'checkin_dia1'
   | 'checkin_dia2'
@@ -19,6 +21,8 @@ const ACTION_LABELS: Record<ActionType, string> = {
   registro_eliminado: 'Registro eliminado',
   pago_registrado: 'Pago registrado',
   pago_grupo_liquidado: 'Grupo liquidado',
+  pago_reembolsado: 'Pago reembolsado',
+  registro_reembolsado: 'Boleto reembolsado',
   asiento_asignado: 'Asiento asignado',
   checkin_dia1: 'Check-in Día 1',
   checkin_dia2: 'Check-in Día 2',
